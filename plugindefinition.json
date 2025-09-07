@@ -1,0 +1,23 @@
+{
+  "Name": "Nexus Collection Downloader",
+  "Author": "Furglitch",
+  "Description": "Nexus Collection Downloader is a Mod Organizer 2 plugin that allows you to download Nexus Mods collections with ease.",
+  "NexusUrl": "",
+  "GithubUrl": "https://github.com/Furglitch/modorganizer2-nxm-collection-dl",
+  "DocsUrl": "",
+  "Versions": [
+    {
+      "Version": "1.0.0",
+      "Released": "2025-XX-XX",
+      "MinSupport": "2.5.2",
+      "MaxSupport": "2.5.2",
+      "MinWorking": "2.5.2",
+      "ReleaseNotes":[
+      ],
+      "DownloadUrl": "",
+      "PluginPath": [],
+      "LocalePath": [],
+      "DataPath": []
+    }
+  ]
+}
