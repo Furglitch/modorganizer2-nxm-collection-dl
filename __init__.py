@@ -1,6 +1,6 @@
-import mobase  # For type-checking createPlugin().
+import mobase
 
-from .plugin import MyPlugin  # Always use relative import:
+from .__meta__ import PluginInfo
 
 def createPlugin() -> mobase.IPlugin:
-    return MyPlugin()
+    return PluginInfo()
