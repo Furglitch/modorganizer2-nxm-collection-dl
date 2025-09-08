@@ -1,7 +1,7 @@
 import mobase
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMainWindow
-from .gui import StepURL
+from .gui import stepURL
 
 class PluginInfo(mobase.IPluginTool):
 
@@ -42,11 +42,11 @@ class PluginInfo(mobase.IPluginTool):
         self._parent = widget
     
     def display(self) -> None:
-        dlg = getattr(self, "_StepURL", None) or StepURL()
+        dlg = getattr(self, "_stepURL", None) or stepURL()
         dlg.exec()
 
     def settings(self): 
         return [ mobase.PluginSetting("enabled", "Enable", True) ]
 
     def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
-        self._StepURL = StepURL(main_window)
+        self._stepURL = stepURL(main_window)
