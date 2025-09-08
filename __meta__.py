@@ -1,4 +1,7 @@
 import mobase
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QMainWindow
+from .gui import StepURL
 
 class PluginInfo(mobase.IPluginTool):
 
@@ -12,10 +15,10 @@ class PluginInfo(mobase.IPluginTool):
         return True
 
     def name(self) -> str:
-        return "Nexus Collections Downloader"
+        return "NXM Collections Downloader"
     
     def displayName(self):
-        return "Nexus Collections Downloader"
+        return "NXM Collections Downloader"
 
     def author(self) -> str:
         return "Furglitch"
@@ -28,8 +31,22 @@ class PluginInfo(mobase.IPluginTool):
 
     def isActive(self) -> bool:
         return self._organizer.pluginSetting(self.name(), "enabled")
+    
+    def icon(self):
+        return QIcon()
+    
+    def tooltip(self):
+        return ""
+    
+    def setParentWidget(self, widget):
+        self._parent = widget
+    
+    def display(self) -> None:
+        dlg = getattr(self, "_StepURL", None) or StepURL()
+        dlg.exec()
 
-    def settings(self):
-        return [
-            mobase.PluginSetting("enabled", "Enable this plugin", True)
-        ]
+    def settings(self): 
+        return [ mobase.PluginSetting("enabled", "Enable", True) ]
+
+    def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
+        self._StepURL = StepURL(main_window)
