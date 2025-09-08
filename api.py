@@ -1,6 +1,8 @@
 import json
 import urllib.request
-import logging
+from PyQt6.QtCore import qDebug
+
+from . import var
 
 def nxmFetch(requestData):
     jsonData = json.dumps(requestData).encode("utf-8")
@@ -14,7 +16,20 @@ def nxmFetch(requestData):
         with urllib.request.urlopen(request) as response:
             content = response.read()
             resp = json.loads(content)
-            logging.warning(resp)
+            qDebug(str(resp))
             return resp.get("data")
-    except (urllib.error.HTTPError, urllib.error.URLError):
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        qDebug(f"[NXMColDL] Error fetching data: {str(e)}")
         return None
+    
+def fetchRevisions(url):
+    qDebug(f"[NXMColDL] Fetching revisions for {url}")
+    jsonData = {
+        "query": "query CollectionRevisions ($domainName: String, $slug: String!) { collection (domainName: $domainName, slug: $slug) { revisions { adultContent, createdAt, discardedAt, id, latest, revisionNumber, revisionStatus, totalSize, collectionChangelog { description, id } } } }",
+        "variables": {
+            "domainName": var.game,
+            "slug": var.collection
+        },
+        "operationName": "CollectionRevisions"
+    }
+    return nxmFetch(jsonData)

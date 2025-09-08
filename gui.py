@@ -3,10 +3,13 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
 
+from .api import fetchRevisions
+from . import var
+
 class stepURL(QDialog):
 	def __init__(self, parent=None):
 		super().__init__(parent)
-		self.setWindowTitle("NXM Collection Downloader - Step 1")
+		self.setWindowTitle("NXM Collection Downloader - Enter URL")
 		self.setMinimumWidth(400)
 
 		layout = QVBoxLayout()
@@ -31,6 +34,7 @@ class stepURL(QDialog):
 			if input.endswith(suffix):
 				input = input[: -len(suffix)]
 		qDebug(f"[NXMColDL] URL entered: {input}")
+		var.uri = input
 		return self.check_valid(input)
 
 	def check_valid(self, url):
@@ -43,8 +47,43 @@ class stepURL(QDialog):
 	def submit(self):
 		matched = self.get_url()
 		if not matched: QMessageBox.critical(self, "Error", "The URL you entered is not a valid Nexus Collection URL."); return
-		self.game = matched.group(1)
-		qDebug(f"[NXMColDL] Game: {self.game}")
-		self.collection = matched.group(2)
-		qDebug(f"[NXMColDL] Collection ID: {self.collection}")
+		var.game = matched.group(1)
+		qDebug(f"[NXMColDL] Game: {var.game}")
+		var.collection = matched.group(2)
+		qDebug(f"[NXMColDL] Collection ID: {var.collection}")
+		self.close()
+		stepVersion(self.parent()).exec()
+
+class stepVersion(QDialog):
+    
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.setWindowTitle("NXM Collection Downloader - Select Revision")
+		self.setMinimumWidth(300)
+    
+		layout = QVBoxLayout()
+
+		self.label = QLabel("Select Collection Revision:")
+		layout.addWidget(self.label)
+
+		self.dropdown = QComboBox()
+		self.getList()
+		layout.addWidget(self.dropdown)
+
+		self.submit_btn = QPushButton("Submit")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def getList(self):
+		revisions = fetchRevisions(var.uri)
+		if revisions: 
+			for data in revisions["collection"]["revisions"]:
+				self.dropdown.addItem(f"Revision {data['revisionNumber']} ({data["createdAt"].split("T")[0]})")
+	
+	def submit(self):
+		revision_text = self.dropdown.currentText()
+		var.revision = int(revision_text.replace('Revision ', '').split(' (')[0])
+		qDebug(f"[NXMColDL] Selected Revision: {var.revision}")
 		self.close()
