@@ -28,18 +28,8 @@ def fetchRevisions(url):
             query CollectionRevisions($domainName: String, $slug: String!) {
                 collection(domainName: $domainName, slug: $slug) {
                     revisions {
-                        adultContent
                         createdAt
-                        discardedAt
-                        id
-                        latest
                         revisionNumber
-                        revisionStatus
-                        totalSize
-                        collectionChangelog {
-                            description
-                            id
-                        }
                     }
                 }
             }
