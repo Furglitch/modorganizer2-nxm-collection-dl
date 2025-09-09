@@ -24,8 +24,28 @@ def nxmFetch(requestData):
     
 def fetchRevisions(url):
     qDebug(f"[NXMColDL] Fetching revisions for {url}")
+    query = """
+            query CollectionRevisions($domainName: String, $slug: String!) {
+                collection(domainName: $domainName, slug: $slug) {
+                    revisions {
+                        adultContent
+                        createdAt
+                        discardedAt
+                        id
+                        latest
+                        revisionNumber
+                        revisionStatus
+                        totalSize
+                        collectionChangelog {
+                            description
+                            id
+                        }
+                    }
+                }
+            }
+            """
     jsonData = {
-        "query": "query CollectionRevisions ($domainName: String, $slug: String!) { collection (domainName: $domainName, slug: $slug) { revisions { adultContent, createdAt, discardedAt, id, latest, revisionNumber, revisionStatus, totalSize, collectionChangelog { description, id } } } }",
+        "query": query,
         "variables": {
             "domainName": var.game,
             "slug": var.collection
@@ -36,8 +56,22 @@ def fetchRevisions(url):
 
 def fetchInfo(url):
     qDebug(f"[NXMColDL] Fetching collection info for {url}")
+    query = """
+            query CollectionManifestInfo($domainName: String, $slug: String!) {
+                collection(domainName: $domainName, slug: $slug) {
+                    name
+                    summary
+                    user {
+                        name
+                    }
+                    tileImage {
+                        thumbnailUrl(size: small)
+                    }
+                }
+            }
+            """
     jsonData = {
-        "query": "query CollectionManifestInfo ($domainName: String, $slug: String!) { collection (domainName: $domainName, slug: $slug) { name, summary, user { name }, tileImage { thumbnailUrl(size: small) } }}}",
+        "query": query,
         "variables": {
             "domainName": var.game,
             "slug": var.collection
