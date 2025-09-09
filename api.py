@@ -33,3 +33,15 @@ def fetchRevisions(url):
         "operationName": "CollectionRevisions"
     }
     return nxmFetch(jsonData)
+
+def fetchInfo(url):
+    qDebug(f"[NXMColDL] Fetching collection info for {url}")
+    jsonData = {
+        "query": "query CollectionManifestInfo ($domainName: String, $slug: String!) { collection (domainName: $domainName, slug: $slug) { name, summary, user { name }, tileImage { thumbnailUrl(size: small) } }}}",
+        "variables": {
+            "domainName": var.game,
+            "slug": var.collection
+        },
+        "operationName": "CollectionManifestInfo"
+    }
+    return nxmFetch(jsonData)
