@@ -2,8 +2,10 @@ import re
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PyQt6.QtCore import QUrl
 
-from .api import fetchRevisions
+from .api import fetchRevisions, fetchInfo
 from . import var
 
 class stepURL(QDialog):
@@ -63,7 +65,44 @@ class stepVersion(QDialog):
     
 		layout = QVBoxLayout()
 
-		self.label = QLabel("Select Collection Revision:")
+		collectionData = fetchInfo(var.uri)
+		qDebug(f"[NXMColDL] Collection Info: {collectionData}")
+		if collectionData:
+			var.author = collectionData["collection"]["user"]["name"]
+			var.name = collectionData["collection"]["name"]
+			var.summary = collectionData["collection"]["summary"]
+			var.thumbnail = collectionData["collection"].get("tileImage", {}).get("thumbnailUrl")
+			qDebug(f"[NXMColDL] Collection Name: {var.name}")
+			qDebug(f"[NXMColDL] Collection Author: {var.author}")
+			qDebug(f"[NXMColDL] Collection Summary: {var.summary}")
+			qDebug(f"[NXMColDL] Collection Thumbnail: {var.thumbnail}")
+		
+		infoBox = QHBoxLayout()
+
+		self.thumb_label = QLabel()
+		self.thumb_label.setMaximumHeight(128)
+		self.thumb_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+		self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+		if var.thumbnail:
+			self.getThumb()
+			infoBox.addWidget(self.thumb_label)
+
+		self.info = QLabel(f"""
+							<h2 style="margin:0;padding:0">{var.name}</h2>
+							<br>
+							by <i>{var.author}</i>
+							<br>
+							<br>
+							{var.summary}
+							""")
+		self.info.setWordWrap(True)
+		infoBox.addWidget(self.info)
+
+		layout.addLayout(infoBox)
+
+		layout.addSpacing(10)
+
+		self.label = QLabel("Select Revision:")
 		layout.addWidget(self.label)
 
 		self.dropdown = QComboBox()
@@ -79,11 +118,33 @@ class stepVersion(QDialog):
 	def getList(self):
 		revisions = fetchRevisions(var.uri)
 		if revisions: 
-			for data in revisions["collection"]["revisions"]:
-				self.dropdown.addItem(f"Revision {data['revisionNumber']} ({data["createdAt"].split("T")[0]})")
+			for data in revisions.get("collection", {}).get("revisions", []):
+				created = data.get("createdAt", "").split("T")[0] if data.get("createdAt") else ""
+				self.dropdown.addItem(f'Revision {data.get("revisionNumber", "?")} ({created})')
 	
+	def getThumb(self):
+		manager = QNetworkAccessManager(self)
+		def handle_reply(reply: QNetworkReply):
+			if reply.error() == QNetworkReply.NetworkError.NoError:
+				data = reply.readAll()
+				pix = QPixmap()
+				if pix.loadFromData(data):
+					pix = pix.scaledToHeight(128, Qt.TransformationMode.SmoothTransformation)
+					self.thumb_label.setPixmap(pix)
+					qDebug("[NXMColDL] Thumbnail loaded")
+				else:
+					qDebug("[NXMColDL] Failed to load thumbnail data into QPixmap")
+			else:
+				qDebug(f"[NXMColDL] Network error loading thumbnail: {reply.errorString()}")
+			reply.deleteLater()
+		# make request
+		request = QNetworkRequest(QUrl(var.thumbnail))
+		reply = manager.get(request)
+		reply.finished.connect(lambda r=reply: handle_reply(r))
+
 	def submit(self):
 		revision_text = self.dropdown.currentText()
 		var.revision = int(revision_text.replace('Revision ', '').split(' (')[0])
 		qDebug(f"[NXMColDL] Selected Revision: {var.revision}")
 		self.close()
+
