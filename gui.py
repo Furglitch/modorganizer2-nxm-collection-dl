@@ -1,11 +1,12 @@
 import re
+import json
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PyQt6.QtCore import QUrl
 
-from .api import fetchRevisions, fetchInfo
+from .api import fetchRevisions, fetchInfo, fetchModInfo
 from . import var
 
 class stepURL(QDialog):
@@ -66,11 +67,12 @@ class stepVersion(QDialog):
 		layout = QVBoxLayout()
 
 		collectionData = fetchInfo(var.uri)
-		qDebug(f"[NXMColDL] Collection Info: {collectionData}")
+
+		qDebug(f"[NXMColDL] Collection Info: {var.cleanJson(collectionData)}")
 		if collectionData:
 			var.author = collectionData["collection"]["user"]["name"]
 			var.name = collectionData["collection"]["name"]
-			var.summary = collectionData["collection"]["summary"]
+			var.summary = var.cleanJson(collectionData["collection"]["summary"], True)
 			var.thumbnail = collectionData["collection"].get("tileImage", {}).get("thumbnailUrl")
 			qDebug(f"[NXMColDL] Collection Name: {var.name}")
 			qDebug(f"[NXMColDL] Collection Author: {var.author}")
@@ -147,4 +149,206 @@ class stepVersion(QDialog):
 		var.revision = int(revision_text.replace('Revision ', '').split(' (')[0])
 		qDebug(f"[NXMColDL] Selected Revision: {var.revision}")
 		self.close()
+		stepModCount(self.parent()).exec()
 
+class stepModCount(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.setWindowTitle("NXM Collection Downloader - Mod Count")
+		self.setMinimumWidth(300)
+
+		layout = QVBoxLayout()
+		label = QLabel("This collection contains the following:")
+		layout.addWidget(label)
+
+		self.getMods()
+
+		essentialCount = len(var.essentialMods)
+		optionalCount = len(var.optionalMods)
+		externalCount = len(var.externalMods)
+		bundledCount = len(var.bundledMods)
+
+		essentialLabel = QLabel(f"{essentialCount} Essential Mods")
+		optionalLabel = QLabel(f"{optionalCount} Optional Mods")
+		externalLabel = QLabel(f"{externalCount} External Resources")
+		bundledLabel = QLabel(f"{bundledCount} Bundled Resources")
+
+		layout.addWidget(essentialLabel)
+		layout.addWidget(optionalLabel)
+		layout.addWidget(externalLabel)
+		layout.addWidget(bundledLabel)
+
+		self.submit_btn = QPushButton("Next")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def getMods(self):
+		mods = fetchModInfo(var.uri)
+		qDebug(f"[NXMColDL] Mods Info: {var.cleanJson(mods)}")
+		for mod in mods["collectionRevision"]["modFiles"]:
+			if not mod["optional"]:
+				var.essentialMods.append(mod)
+				qDebug(f"[NXMColDL] Essential mod added: {mod['file']['mod']['name']}")
+			else:
+				var.optionalMods.append(mod)
+				qDebug(f"[NXMColDL] Optional mod added: {mod['file']['mod']['name']}")
+		for mod in mods["collectionRevision"]["externalResources"]:
+			if mod["resourceUrl"]:
+				var.externalMods.append(mod)
+				qDebug(f"[NXMColDL] External resource added: {mod['name']}")
+			else:
+				var.bundledMods.append(mod)
+				qDebug(f"[NXMColDL] Bundled resource added: {mod['name']}")
+
+	def submit(self):
+		self.close()
+		if var.essentialMods:
+			stepEssential(self.parent()).exec()
+		elif var.optionalMods:
+			stepOptional(self.parent()).exec()
+		elif var.externalMods:
+			stepExternal(self.parent()).exec()
+		elif var.bundledMods:
+			stepBundled(self.parent()).exec()
+
+class stepEssential(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+
+		self.setWindowTitle("NXM Collection Downloader - Essential Mods")
+		self.setMinimumWidth(300)
+
+		layout = QVBoxLayout()
+		label = QLabel("Included 'Essential' mods:")
+		layout.addWidget(label)
+
+		self.modlist = QListWidget()
+		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+		self.modlist.setAlternatingRowColors(True)
+		for mod in var.essentialMods:
+			item = QListWidgetItem(f"{mod['file']['mod']['name']} by {mod['file']['mod']['author']}")
+			item.setData(Qt.ItemDataRole.UserRole, mod)
+			self.modlist.addItem(item)
+		self.modlist.setMinimumHeight(200)
+		layout.addWidget(self.modlist)
+
+		self.submit_btn = QPushButton("Next")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def submit(self):
+		self.close()
+		if var.optionalMods:
+			stepOptional(self.parent()).exec()
+		elif var.externalMods:
+			stepExternal(self.parent()).exec()
+		elif var.bundledMods:
+			stepBundled(self.parent()).exec()
+
+class stepOptional(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+
+		self.setWindowTitle("NXM Collection Downloader - Optional Mods")
+		self.setMinimumWidth(300)
+
+		layout = QVBoxLayout()
+		label = QLabel("Select 'Optional' mods:")
+		layout.addWidget(label)
+
+		self.modlist = QListWidget()
+		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+		self.modlist.setAlternatingRowColors(True)
+		for mod in var.optionalMods:
+			item = QListWidgetItem(f"{mod['file']['mod']['name']} by {mod['file']['mod']['author']}")
+			item.setData(Qt.ItemDataRole.UserRole, mod)
+			item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+			item.setCheckState(Qt.CheckState.Checked)
+			self.modlist.addItem(item)
+		self.modlist.setMinimumHeight(200)
+		layout.addWidget(self.modlist)
+
+		self.submit_btn = QPushButton("Next")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def submit(self):
+		self.close()
+		if var.externalMods:
+			stepExternal(self.parent()).exec()
+		elif var.bundledMods:
+			stepBundled(self.parent()).exec()
+
+class stepExternal(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+
+		self.setWindowTitle("NXM Collection Downloader - External Mods")
+		self.setMinimumWidth(300)
+
+		layout = QVBoxLayout()
+		label = QLabel("Included 'External' mods:")
+		layout.addWidget(label)
+
+		self.modlist = QListWidget()
+		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+		self.modlist.setAlternatingRowColors(True)
+		for mod in var.externalMods:
+			item = QListWidgetItem(f"{mod['name']}")
+			item.setData(Qt.ItemDataRole.UserRole, mod)
+			self.modlist.addItem(item)
+		self.modlist.setMinimumHeight(200)
+		layout.addWidget(self.modlist)
+
+		self.open_urls_cb = QCheckBox("Open URLs in Browser")
+		self.open_urls_cb.setChecked(True)
+		self.open_urls_cb.stateChanged.connect(lambda s: setattr(var, "open_urls", bool(s)))
+		layout.addWidget(self.open_urls_cb)
+
+		self.submit_btn = QPushButton("Next")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def submit(self):
+		self.close()
+		if var.bundledMods:
+			stepBundled(self.parent()).exec()
+
+class stepBundled(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+
+		self.setWindowTitle("NXM Collection Downloader - Bundled Mods")
+		self.setMinimumWidth(300)
+
+		layout = QVBoxLayout()
+		label = QLabel("Included 'Bundled' mods:")
+		layout.addWidget(label)
+
+		self.modlist = QListWidget()
+		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+		self.modlist.setAlternatingRowColors(True)
+		for mod in var.bundledMods:
+			item = QListWidgetItem(f"{mod['file']['mod']['name']} by {mod['file']['mod']['author']}")
+			item.setData(Qt.ItemDataRole.UserRole, mod)
+			self.modlist.addItem(item)
+		self.modlist.setMinimumHeight(200)
+		layout.addWidget(self.modlist)
+
+		self.submit_btn = QPushButton("Next")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def submit(self):
+		self.close()
+		#stepOptional(self.parent()).exec()

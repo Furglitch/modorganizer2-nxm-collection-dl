@@ -16,7 +16,7 @@ def nxmFetch(requestData):
         with urllib.request.urlopen(request) as response:
             content = response.read()
             resp = json.loads(content)
-            qDebug(str(resp))
+            qDebug(var.cleanJson(resp))
             return resp.get("data")
     except (urllib.error.HTTPError, urllib.error.URLError) as e:
         qDebug(f"[NXMColDL] Error fetching data: {str(e)}")
@@ -67,5 +67,60 @@ def fetchInfo(url):
             "slug": var.collection
         },
         "operationName": "CollectionManifestInfo"
+    }
+    return nxmFetch(jsonData)
+
+def fetchModInfo(url):
+    qDebug(f"[NXMColDL] Fetching collection info for {url}")
+    query = """
+            query CollectionRevisionMods($revision: Int, $slug: String!, $viewAdultContent: Boolean) {
+                collectionRevision(revision: $revision, slug: $slug, viewAdultContent: $viewAdultContent) {
+                    externalResources {
+                        id
+                        name
+                        resourceType
+                        resourceUrl
+                    }
+                    modFiles {
+                        fileId
+                        optional
+                        file {
+                            fileId
+                            name
+                            scanned
+                            size
+                            sizeInBytes
+                            version
+                            mod {
+                                adult
+                                author
+                                category
+                                modId
+                                name
+                                pictureUrl
+                                summary
+                                version
+                                game {
+                                    domainName
+                                }
+                                uploader {
+                                    avatar
+                                    memberId
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            """
+    jsonData = {
+        "query": query,
+        "variables": {
+            "revision": var.revision,
+            "slug": var.collection,
+            "viewAdultContent": True,
+        },
+        "operationName": "CollectionRevisionMods"
     }
     return nxmFetch(jsonData)

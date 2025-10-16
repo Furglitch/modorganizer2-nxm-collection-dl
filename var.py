@@ -1,3 +1,5 @@
+import json, re
+
 uri = None
 game = None
 collection = None
@@ -6,3 +8,15 @@ author = "Unknown Author"
 name = "Unknown Collection"
 summary = "No description available."
 thumbnail = None
+
+essentialMods = []
+optionalMods = []
+externalMods = []
+bundledMods = []
+
+open_urls = True
+
+def cleanJson(data, visible=False):
+    data = json.dumps(data, ensure_ascii=True)
+    if visible: data = re.sub(r'\\u[0-9a-fA-F]{4}', '', data)
+    return data
