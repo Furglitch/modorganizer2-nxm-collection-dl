@@ -9,6 +9,25 @@ from PyQt6.QtCore import QUrl
 from .api import fetchRevisions, fetchInfo, fetchModInfo
 from . import var
 
+
+class ModInfoWorker(QObject):
+	finished = pyqtSignal(object)
+	error = pyqtSignal(str)
+
+	def __init__(self, uri):
+		super().__init__()
+		self.uri = uri
+
+	def run(self):
+		try:
+			mods = fetchModInfo(self.uri)
+			if mods is None:
+				self.error.emit('Failed to fetch mod info')
+			else:
+				self.finished.emit(mods)
+		except Exception as e:
+			self.error.emit(str(e))
+
 class stepURL(QDialog):
 	def __init__(self, parent=None):
 		super().__init__(parent)
@@ -161,46 +180,82 @@ class stepModCount(QDialog):
 		label = QLabel("This collection contains the following:")
 		layout.addWidget(label)
 
+		self.essentialLabel = QLabel("Loading essential mods...")
+		self.optionalLabel = QLabel("Loading optional mods...")
+		self.externalLabel = QLabel("Loading external resources...")
+		self.bundledLabel = QLabel("Loading bundled resources...")
+
+		layout.addWidget(self.essentialLabel)
+		layout.addWidget(self.optionalLabel)
+		layout.addWidget(self.externalLabel)
+		layout.addWidget(self.bundledLabel)
+
+		self.submit_btn = QPushButton("Next")
+		self.submit_btn.setEnabled(False) # disabled until data is loaded
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
 		self.getMods()
+
+	def getMods(self):
+		var.essentialMods.clear()
+		var.optionalMods.clear()
+		var.chosenOptional.clear()
+		var.externalMods.clear()
+		var.bundledMods.clear()
+
+		# background process for loading modlist
+		self._thread = QThread(self)
+		self._worker = ModInfoWorker(var.uri)
+		self._worker.moveToThread(self._thread)
+		self._thread.started.connect(self._worker.run)
+		self._worker.finished.connect(self._on_mods_fetched)
+		self._worker.error.connect(self._on_mods_error)
+		self._worker.finished.connect(self._thread.quit)
+		self._worker.finished.connect(self._worker.deleteLater)
+		self._thread.finished.connect(self._thread.deleteLater)
+		self._thread.start()
+
+
+	def _on_mods_error(self, err):
+		qDebug(f"[NXMColDL] Error fetching mods: {err}")
+		QMessageBox.critical(self, "Error", f"Failed to load mod information: {err}")
+		self.essentialLabel.setText("Error loading essential mods")
+		self.optionalLabel.setText("Error loading optional mods")
+		self.externalLabel.setText("Error loading external resources")
+		self.bundledLabel.setText("Error loading bundled resources")
+
+
+	def _on_mods_fetched(self, mods):
+		qDebug(f"[NXMColDL] Mods Info: {var.cleanJson(mods)}")
+		for mod in mods.get("collectionRevision", {}).get("modFiles", []):
+			if not mod.get("optional"):
+				var.essentialMods.append(mod)
+				qDebug(f"[NXMColDL] Essential mod added: {mod['file']['mod']['name']}")
+			else:
+				var.optionalMods.append(mod)
+				qDebug(f"[NXMColDL] Optional mod added: {mod['file']['mod']['name']}")
+		for mod in mods.get("collectionRevision", {}).get("externalResources", []):
+			if mod.get("resourceUrl"):
+				var.externalMods.append(mod)
+				qDebug(f"[NXMColDL] External resource added: {mod.get('name')}")
+			else:
+				var.bundledMods.append(mod)
+				qDebug(f"[NXMColDL] Bundled resource added: {mod.get('name')}")
 
 		essentialCount = len(var.essentialMods)
 		optionalCount = len(var.optionalMods)
 		externalCount = len(var.externalMods)
 		bundledCount = len(var.bundledMods)
 
-		essentialLabel = QLabel(f"{essentialCount} Essential Mods")
-		optionalLabel = QLabel(f"{optionalCount} Optional Mods")
-		externalLabel = QLabel(f"{externalCount} External Resources")
-		bundledLabel = QLabel(f"{bundledCount} Bundled Resources")
+		self.essentialLabel.setText(f"{essentialCount} essential mods")
+		self.optionalLabel.setText(f"{optionalCount} optional mods")
+		self.externalLabel.setText(f"{externalCount} external resources")
+		self.bundledLabel.setText(f"{bundledCount} bundled resources")
 
-		layout.addWidget(essentialLabel)
-		layout.addWidget(optionalLabel)
-		layout.addWidget(externalLabel)
-		layout.addWidget(bundledLabel)
-
-		self.submit_btn = QPushButton("Next")
-		self.submit_btn.clicked.connect(self.submit)
-		layout.addWidget(self.submit_btn)
-
-		self.setLayout(layout)
-
-	def getMods(self):
-		mods = fetchModInfo(var.uri)
-		qDebug(f"[NXMColDL] Mods Info: {var.cleanJson(mods)}")
-		for mod in mods["collectionRevision"]["modFiles"]:
-			if not mod["optional"]:
-				var.essentialMods.append(mod)
-				qDebug(f"[NXMColDL] Essential mod added: {mod['file']['mod']['name']}")
-			else:
-				var.optionalMods.append(mod)
-				qDebug(f"[NXMColDL] Optional mod added: {mod['file']['mod']['name']}")
-		for mod in mods["collectionRevision"]["externalResources"]:
-			if mod["resourceUrl"]:
-				var.externalMods.append(mod)
-				qDebug(f"[NXMColDL] External resource added: {mod['name']}")
-			else:
-				var.bundledMods.append(mod)
-				qDebug(f"[NXMColDL] Bundled resource added: {mod['name']}")
+		self.submit_btn.setEnabled(True)
 
 	def submit(self):
 		self.close()
