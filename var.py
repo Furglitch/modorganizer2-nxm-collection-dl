@@ -14,7 +14,8 @@ optionalMods = []
 externalMods = []
 bundledMods = []
 
-open_urls = True
+chosenOptional = []
+chosenExternal = True
 
 def cleanJson(data, visible=False):
     data = json.dumps(data, ensure_ascii=True)

@@ -279,6 +279,17 @@ class stepOptional(QDialog):
 		self.setLayout(layout)
 
 	def submit(self):
+
+		var.chosenOptional = []
+		for i in range(self.modlist.count()):
+			item = self.modlist.item(i)
+			if item.checkState() == Qt.CheckState.Checked:
+				mod_data = item.data(Qt.ItemDataRole.UserRole)
+				var.chosenOptional.append(mod_data)
+				qDebug(f"[NXMColDL] Optional mod selected: {mod_data['file']['mod']['name']}")
+		
+		qDebug(f"[NXMColDL] Total optional mods selected: {len(var.chosenOptional)}")
+		
 		self.close()
 		if var.externalMods:
 			stepExternal(self.parent()).exec()
@@ -306,10 +317,10 @@ class stepExternal(QDialog):
 		self.modlist.setMinimumHeight(200)
 		layout.addWidget(self.modlist)
 
-		self.open_urls_cb = QCheckBox("Open URLs in Browser")
-		self.open_urls_cb.setChecked(True)
-		self.open_urls_cb.stateChanged.connect(lambda s: setattr(var, "open_urls", bool(s)))
-		layout.addWidget(self.open_urls_cb)
+		self.urlCheck = QCheckBox("Open URLs in Browser")
+		self.urlCheck.setChecked(True)
+		self.urlCheck.stateChanged.connect(lambda s: setattr(var, "chosenExternal", bool(s)))
+		layout.addWidget(self.urlCheck)
 
 		self.submit_btn = QPushButton("Next")
 		self.submit_btn.clicked.connect(self.submit)
