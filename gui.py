@@ -267,6 +267,8 @@ class stepModCount(QDialog):
 			stepExternal(self.parent()).exec()
 		elif var.bundledMods:
 			stepBundled(self.parent()).exec()
+		else:
+			stepSummary(self.parent()).exec()
 
 class stepEssential(QDialog):
 	def __init__(self, parent=None):
@@ -283,7 +285,8 @@ class stepEssential(QDialog):
 		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
 		self.modlist.setAlternatingRowColors(True)
 		for mod in var.essentialMods:
-			item = QListWidgetItem(f"{mod['file']['mod']['name']} by {mod['file']['mod']['author']}")
+			item_text = f"Mod: {mod['file']['mod']['name']}\nFile: {mod['file']['name']} - {mod['file']['version']}\nby {mod['file']['mod']['author']}"
+			item = QListWidgetItem(item_text)
 			item.setData(Qt.ItemDataRole.UserRole, mod)
 			self.modlist.addItem(item)
 		self.modlist.setMinimumHeight(200)
@@ -303,6 +306,8 @@ class stepEssential(QDialog):
 			stepExternal(self.parent()).exec()
 		elif var.bundledMods:
 			stepBundled(self.parent()).exec()
+		else:
+			stepSummary(self.parent()).exec()
 
 class stepOptional(QDialog):
 	def __init__(self, parent=None):
@@ -319,10 +324,12 @@ class stepOptional(QDialog):
 		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
 		self.modlist.setAlternatingRowColors(True)
 		for mod in var.optionalMods:
-			item = QListWidgetItem(f"{mod['file']['mod']['name']} by {mod['file']['mod']['author']}")
+			item_text = f"Mod: {mod['file']['mod']['name']}\nFile: {mod['file']['name']} - {mod['file']['version']}\nby {mod['file']['mod']['author']}"
+			item = QListWidgetItem(item_text)
 			item.setData(Qt.ItemDataRole.UserRole, mod)
 			item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
 			item.setCheckState(Qt.CheckState.Checked)
+			item.setSizeHint(QSize(0, QFontMetrics(self.modlist.font()).lineSpacing() * 3 + 8))
 			self.modlist.addItem(item)
 		self.modlist.setMinimumHeight(200)
 		layout.addWidget(self.modlist)
@@ -350,6 +357,8 @@ class stepOptional(QDialog):
 			stepExternal(self.parent()).exec()
 		elif var.bundledMods:
 			stepBundled(self.parent()).exec()
+		else:
+			stepSummary(self.parent()).exec()
 
 class stepExternal(QDialog):
 	def __init__(self, parent=None):
@@ -385,8 +394,12 @@ class stepExternal(QDialog):
 
 	def submit(self):
 		self.close()
+		if not var.chosenExternal:
+			var.externalMods.clear() # clear if not chosen
 		if var.bundledMods:
 			stepBundled(self.parent()).exec()
+		else:
+			stepSummary(self.parent()).exec()
 
 class stepBundled(QDialog):
 	def __init__(self, parent=None):
