@@ -7,6 +7,7 @@ from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRepl
 from PyQt6.QtCore import QUrl
 
 from .api import fetchRevisions, fetchInfo, fetchModInfo
+from . import __meta__
 from . import var
 
 
@@ -464,4 +465,26 @@ class stepSummary(QDialog):
 		self.setLayout(layout)
 
 	def submit(self):
+		self.close()
+		stepDownload(self.parent()).exec()
+
+class stepDownload(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		super().__init__(parent)
+		self.setWindowTitle("NXM Collection Downloader - Downloading...")
+		self.setMinimumWidth(150)
+
+		layout = QVBoxLayout()
+		label = QLabel("Preparing to download selected mods...")
+		layout.addWidget(label)
+		self.setLayout(layout)
+
+		plugin_instance = getattr(__meta__, "_active_plugin", None)
+		if plugin_instance is not None:
+			for mod in (var.essentialMods + var.chosenOptional):
+				plugin_instance.downloadMod(mod)
+				label.setText(f"Adding mod to Download Handler: {mod['file']['mod']['name']}")
+		else: qDebug("[NXMColDL] downloadMod called without active plugin instance; Aborting")
+
 		self.close()
