@@ -430,4 +430,38 @@ class stepBundled(QDialog):
 
 	def submit(self):
 		self.close()
-		#stepOptional(self.parent()).exec()
+		stepSummary(self.parent()).exec()
+
+class stepSummary(QDialog):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.setWindowTitle("NXM Collection Downloader - Summary")
+		self.setMinimumWidth(300)
+
+		layout = QVBoxLayout()
+		label = QLabel("Summary of selected mods:")
+		layout.addWidget(label)
+
+		essentialCount = len(var.essentialMods)
+		optionalCount = len(var.chosenOptional)
+		externalCount = len(var.externalMods)
+		bundledCount = len(var.bundledMods)
+
+		labelEssential = QLabel(f"{essentialCount} essential mods")
+		labelOptional = QLabel(f"{optionalCount} optional mods")
+		labelExternal = QLabel(f"{externalCount} external resources")
+		labelBundled = QLabel(f"{bundledCount} bundled resources")
+
+		layout.addWidget(labelEssential)
+		layout.addWidget(labelOptional)
+		layout.addWidget(labelExternal)
+		layout.addWidget(labelBundled)
+
+		self.submit_btn = QPushButton("Finish")
+		self.submit_btn.clicked.connect(self.submit)
+		layout.addWidget(self.submit_btn)
+
+		self.setLayout(layout)
+
+	def submit(self):
+		self.close()
