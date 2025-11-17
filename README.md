@@ -9,7 +9,6 @@ This plugin parses a NXM collection URL, shows available revisions, and helps yo
 - Select optional/external items to include before downloading.
 
 #### Currently Unimplemented:
-- Downloads
 - FOMOD Selections (need to see if possible)
 - Installation of bundled resources (unable to find a collection to test them)
 
