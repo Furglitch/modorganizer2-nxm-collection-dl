@@ -1,0 +1,66 @@
+name: Bug Report
+description: Create a report to help us fix issues
+title: "[Bug]: "
+labels: ['bug']
+body:
+  - type: checkboxes
+    id: troubleshooting
+    attributes:
+      label: Troubleshooting
+      description: Please confirm you have tried the following before submitting this bug report.
+      options:
+        - label: I have searched for existing issues.
+          required: true
+        - label: I have updated to the latest plugin version.
+          required: false
+  - type: textarea
+    id: issue
+    attributes:
+      label: What happened?
+      placeholder: Describe the bug
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: Describe the expected behavior
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce the issue
+      value: '1. '
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: '## Install Environment'
+  - type: input
+    id: version
+    attributes:
+      label: Installer version
+      description: Do not put 'latest', put the version number
+      value: '1.X.X'
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Desired Collection
+      description: Add the complete link of the collection you are trying to download
+      placeholder: 'https://www.nexusmods.com/games/skyrimspecialedition/collections/qdurkx'
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Please include Mod Organizer's debug logs here.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: misc
+    attributes:
+      label: Additional Notes
+      description: Anything else you want to add?
