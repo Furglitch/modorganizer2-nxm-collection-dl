@@ -29,15 +29,26 @@ jobs:
 
       - name: Create release archive
         run: |
-          zip -r nxm-collection-dl_${{ github.event.inputs.version }}.zip nxm-collection-dl/
+          zip -r nxm-collection-dl-${{ github.event.inputs.version }}.zip nxm-collection-dl/
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ github.event.inputs.version }}
-          name: Release ${{ github.event.inputs.version }}
-          draft: false
-          prerelease: false
-          files: nxm-collection-dl_${{ github.event.inputs.version }}.zip
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1.1.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          release_name: "${{ github.event.inputs.version }}"
+          body: "NXM Collection Downloader v${{ github.event.inputs.version }}"
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: nxm-collection-dl-${{ github.event.inputs.version }}.zip
+          asset_name: nxm-collection-dl-${{ github.event.inputs.version }}.zip
+          asset_content_type: application/zip
