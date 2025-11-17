@@ -1,0 +1,43 @@
+name: build-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to build'
+        required: true
+        default: '1.X.X'
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Create directory structure
+        run: |
+          mkdir -p nxm-collection-dl
+          cp __init__.py nxm-collection-dl/
+          cp __meta__.py nxm-collection-dl/
+          cp api.py nxm-collection-dl/
+          cp gui.py nxm-collection-dl/
+          cp LICENSE nxm-collection-dl/
+          cp README.md nxm-collection-dl/
+          cp var.py nxm-collection-dl/
+
+      - name: Create release archive
+        run: |
+          zip -r nxm-collection-dl_${{ github.event.inputs.version }}.zip nxm-collection-dl/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
+          draft: false
+          prerelease: false
+          files: nxm-collection-dl_${{ github.event.inputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
