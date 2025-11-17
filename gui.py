@@ -475,16 +475,28 @@ class stepDownload(QDialog):
 		self.setWindowTitle("NXM Collection Downloader - Downloading...")
 		self.setMinimumWidth(150)
 
-		layout = QVBoxLayout()
-		label = QLabel("Preparing to download selected mods...")
-		layout.addWidget(label)
-		self.setLayout(layout)
+		self.layout = QVBoxLayout()
+		self.label = QLabel("Preparing to download selected mods...")
+		self.submit_btn = QPushButton("Finish")
+		self.submit_btn.clicked.connect(self.submit)
+		self.layout.addWidget(self.label)
+		self.layout.addWidget(self.submit_btn)
+		self.setLayout(self.layout)
 
 		plugin_instance = getattr(__meta__, "_active_plugin", None)
 		if plugin_instance is not None:
+			self.submit_btn.setText("Cancel")
 			for mod in (var.essentialMods + var.chosenOptional):
 				plugin_instance.downloadMod(mod)
-				label.setText(f"Adding mod to Download Handler: {mod['file']['mod']['name']}")
-		else: qDebug("[NXMColDL] downloadMod called without active plugin instance; Aborting")
+				self.label.setText(f"Adding mod to Download Handler: {mod['file']['mod']['name']}")
+			for mod in (var.externalMods):
+				QDesktopServices.openUrl(QUrl(mod['resourceUrl']))
+				self.label.setText(f"Opening external resource URL: {mod['name']}")
+		else:
+			qDebug("[NXMColDL] downloadMod called without active plugin instance; Aborting")
+			self.close()
+		self.label.setText("Mod downloads have been added to the Download Handler.")
+		self.submit_btn.setText("Next")
 
+	def submit(self):
 		self.close()
