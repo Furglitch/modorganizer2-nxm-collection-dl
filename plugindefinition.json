@@ -8,12 +8,11 @@
   "Versions": [
     {
       "Version": "1.0.0",
-      "Released": "2025-XX-XX",
+      "Released": "2025-11-16",
       "MinSupport": "2.5.2",
       "MaxSupport": "2.5.2",
       "MinWorking": "2.5.2",
-      "ReleaseNotes":[
-      ],
+      "ReleaseNotes": [],
       "DownloadUrl": "",
       "PluginPath": [],
       "LocalePath": [],
