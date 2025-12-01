@@ -21,6 +21,23 @@
       ],
       "LocalePath": [],
       "DataPath": []
+    },
+    {
+      "Version": "1.0.1",
+      "Released": "2025-12-01",
+      "MinSupport": "2.5.2",
+      "MaxSupport": "2.5.2",
+      "MinWorking": "2.5.2",
+      "ReleaseNotes": [
+        "Fix crash with Collections that have bundled assets",
+        "Nexus does not have a way to access bundled assets through their API, so for now, this will show a warning that these files will not be downloaded."
+      ],
+      "DownloadUrl": "https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/download/1.0.1/nxm-collection-dl-1.0.1.zip",
+      "PluginPath": [
+        "nxm-collection-dl"
+      ],
+      "LocalePath": [],
+      "DataPath": []
     }
   ]
 }
