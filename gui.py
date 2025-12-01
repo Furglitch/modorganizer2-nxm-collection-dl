@@ -78,12 +78,12 @@ class stepURL(QDialog):
 		stepVersion(self.parent()).exec()
 
 class stepVersion(QDialog):
-    
+	
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setWindowTitle("NXM Collection Downloader - Select Revision")
 		self.setMinimumWidth(300)
-    
+	
 		layout = QVBoxLayout()
 
 		collectionData = fetchInfo(var.uri)
@@ -406,24 +406,30 @@ class stepBundled(QDialog):
 	def __init__(self, parent=None):
 		super().__init__(parent)
 
-		self.setWindowTitle("NXM Collection Downloader - Bundled Mods")
+		self.setWindowTitle("NXM Collection Downloader - Bundled Mods Warning")
 		self.setMinimumWidth(300)
 
 		layout = QVBoxLayout()
-		label = QLabel("Included 'Bundled' mods:")
+		explanation = QLabel(
+"""
+Bundled assets are currently unsupported as there are no public APIs for retreiving them. 
+They can only be retreived with the Vortex client, and are listed here for your information.
+""")
+		label = QLabel("The following bundled assets will NOT be installed:")
+		label.setStyleSheet("color: red; font-weight: bold;")
+		layout.addWidget(explanation)
 		layout.addWidget(label)
-
 		self.modlist = QListWidget()
 		self.modlist.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
 		self.modlist.setAlternatingRowColors(True)
 		for mod in var.bundledMods:
-			item = QListWidgetItem(f"{mod['file']['mod']['name']} by {mod['file']['mod']['author']}")
+			item = QListWidgetItem(f"{mod['name']}")
 			item.setData(Qt.ItemDataRole.UserRole, mod)
 			self.modlist.addItem(item)
 		self.modlist.setMinimumHeight(200)
 		layout.addWidget(self.modlist)
 
-		self.submit_btn = QPushButton("Next")
+		self.submit_btn = QPushButton("Acknowledge")
 		self.submit_btn.clicked.connect(self.submit)
 		layout.addWidget(self.submit_btn)
 
