@@ -38,6 +38,22 @@
       ],
       "LocalePath": [],
       "DataPath": []
+    },
+    {
+      "Version": "1.0.2",
+      "Released": "2026-03-12",
+      "MinSupport": "2.5.2",
+      "MaxSupport": "2.5.2",
+      "MinWorking": "2.5.2",
+      "ReleaseNotes": [
+        "Provide alternative download method for non-Premium users."
+      ],
+      "DownloadUrl": "https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/download/1.0.2/nxm-collection-dl-1.0.2.zip",
+      "PluginPath": [
+        "nxm-collection-dl"
+      ],
+      "LocalePath": [],
+      "DataPath": []
     }
   ]
 }
