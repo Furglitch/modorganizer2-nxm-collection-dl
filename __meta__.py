@@ -1,4 +1,4 @@
-import mobase
+import mobase # type: ignore
 from PyQt6.QtCore import qDebug
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMainWindow
