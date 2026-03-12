@@ -24,3 +24,11 @@ This plugin parses a NXM collection URL, shows available revisions, and helps yo
 3. Select the collection revision you'd like to install.
 4. Review and select optional/external items as prompted.
 5. Proceed to download/install using MO2's normal workflow (the plugin gathers the mod/file IDs and resources).
+
+## Contributing
+
+Contributions are welcome! If you have suggestions, find bugs, or want to add features, please open an issue or submit a pull request.
+
+Development environment can be set up with `uv sync`.
+
+To test, simply copy the plugin files into your MO2 `plugins` directory and enable it. You can then run the plugin from the Tools menu to test its functionality.
