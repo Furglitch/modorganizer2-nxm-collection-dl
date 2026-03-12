@@ -10,7 +10,6 @@ This plugin parses a NXM collection URL, shows available revisions, and helps yo
 
 #### Currently Unimplemented:
 - FOMOD Selections (need to see if possible)
-- Installation of bundled resources (unable to find a collection to test them)
 
 ## Installation
 1. Download the [latest release](https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/latest)
