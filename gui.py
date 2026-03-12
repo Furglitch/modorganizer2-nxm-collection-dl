@@ -479,9 +479,93 @@ class stepSummary(QDialog):
 		self.close()
 		stepDownload(self.parent()).exec()
 
+class stepDownloadProgress(QDialog):
+	"""Progress dialog that tracks download completion"""
+	def __init__(self, parent=None, total_mods=0):
+		super().__init__(parent)
+		self.setWindowTitle("NXM Collection Downloader - Download Progress")
+		self.setMinimumWidth(350)
+		
+		self.total_mods = total_mods
+		self.completed_count = 0
+		self.failed_count = 0
+		self.is_tracking = True
+		
+		layout = QVBoxLayout()
+		
+		self.label = QLabel(f"Downloading mods: 0/{self.total_mods} completed")
+		self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+		layout.addWidget(self.label)
+		
+		self.progress = QProgressBar()
+		self.progress.setMinimum(0)
+		self.progress.setMaximum(self.total_mods)
+		self.progress.setValue(0)
+		layout.addWidget(self.progress)
+		
+		self.detail_label = QLabel("Downloads have been queued...")
+		self.detail_label.setWordWrap(True)
+		self.detail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+		layout.addWidget(self.detail_label)
+		
+		self.close_btn = QPushButton("Close")
+		self.close_btn.clicked.connect(self.accept)
+		layout.addWidget(self.close_btn)
+		
+		self.setLayout(layout)
+		
+		# Register callbacks with download manager
+		plugin_instance = getattr(__meta__, "_active_plugin", None)
+		if plugin_instance and hasattr(plugin_instance, "_organizer"):
+			self.download_manager = plugin_instance._organizer.downloadManager()
+			self.download_manager.onDownloadComplete(self.on_download_complete)
+			self.download_manager.onDownloadFailed(self.on_download_failed)
+			self.download_manager.onDownloadRemoved(self.on_download_removed)
+	
+	def on_download_complete(self, download_id):
+		"""Called when a download completes successfully"""
+		if not self.is_tracking:
+			return
+		
+		self.completed_count += 1
+		self.update_progress()
+		
+		if self.completed_count >= self.total_mods:
+			self.is_tracking = False
+	
+	def on_download_failed(self, download_id):
+		"""Called when a download fails"""
+		if not self.is_tracking:
+			return
+		
+		self.failed_count += 1
+		self.completed_count += 1
+		self.update_progress()
+		
+		if self.completed_count >= self.total_mods:
+			self.is_tracking = False
+	
+	def on_download_removed(self, download_id):
+		"""Called when a download is removed/cancelled"""
+		pass
+	
+	def update_progress(self):
+		"""Update the progress display"""
+		self.progress.setValue(self.completed_count)
+		self.label.setText(f"Downloading mods: {self.completed_count}/{self.total_mods} completed")
+		
+		if self.failed_count > 0:
+			self.detail_label.setText(f"{self.failed_count} download(s) failed. Check the Downloads tab for details.")
+			self.detail_label.setStyleSheet("color: orange;")
+		elif self.completed_count >= self.total_mods:
+			self.detail_label.setText("All downloads completed!")
+			self.detail_label.setStyleSheet("color: green;")
+		else:
+			self.detail_label.setText(f"Downloading... {self.total_mods - self.completed_count} remaining")
+			self.detail_label.setStyleSheet("")
+
 class stepDownload(QDialog):
 	def __init__(self, parent=None):
-		super().__init__(parent)
 		super().__init__(parent)
 		self.setWindowTitle("NXM Collection Downloader - Downloading...")
 		self.setMinimumWidth(150)
@@ -495,6 +579,11 @@ class stepDownload(QDialog):
 
 		plugin_instance = getattr(__meta__, "_active_plugin", None)
 		if plugin_instance is not None:
+			# Always open external resources if user chose to
+			if var.chosenExternal and var.externalMods:
+				for mod in (var.externalMods):
+					QDesktopServices.openUrl(QUrl(mod['resourceUrl']))
+			
 			if var.openModWebsites:
 				# User chose to open websites instead of downloading
 				for mod in (var.essentialMods + var.chosenOptional):
@@ -503,19 +592,19 @@ class stepDownload(QDialog):
 					self.mod_urls_to_open.append((mod['file']['mod']['name'], mod_url))
 				self.label.setText(f"Ready to open {len(self.mod_urls_to_open)} mod website(s) in batches.")
 			else:
-				# Default behavior: add to download manager
-				for mod in (var.essentialMods + var.chosenOptional):
+				# Queue downloads and show progress tracker
+				mods_to_download = var.essentialMods + var.chosenOptional
+				for mod in mods_to_download:
 					plugin_instance.downloadMod(mod)
-					self.label.setText(f"Adding mod to Download Handler: {mod['file']['mod']['name']}")
-				self.label.setText("Mod downloads have been added to the Download Handler.")
-			
-			# Always open external resources
-			if not var.chosenExternal:
-				for mod in (var.externalMods):
-					QDesktopServices.openUrl(QUrl(mod['resourceUrl']))
+				
+				self.close()
+				progress_dialog = stepDownloadProgress(self.parent(), len(mods_to_download))
+				progress_dialog.exec()
+				return
 		else:
 			qDebug("[NXMColDL] downloadMod called without active plugin instance; Aborting")
 			self.close()
+			return
 		
 		self.layout.addWidget(self.label)
 		

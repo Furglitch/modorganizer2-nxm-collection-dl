@@ -66,9 +66,4 @@ class PluginInfo(mobase.IPluginTool):
         modID = int(modInfo['file']['mod']['modId'])
         fileID = int(modInfo['file']['fileId'])
         qDebug(f"Downloading mod {modID} file {fileID}")
-        self._organizer.downloadManager().startDownloadNexusFile(modID, fileID)
-        if hasattr(self, "_dialogFiles") and self._dialogFiles:
-            try:
-                self._dialogFiles.close()
-            except Exception:
-                pass
+        return self._organizer.downloadManager().startDownloadNexusFile(modID, fileID)
