@@ -54,7 +54,10 @@ class PluginInfo(mobase.IPluginTool):
         dlg.exec()
 
     def settings(self): 
-        return [ mobase.PluginSetting("enabled", "Enable", True) ]
+        return [
+            mobase.PluginSetting("enabled", "Enable", True),
+            mobase.PluginSetting("modpage_batch_size", "Number of mod websites to open at once", 5)
+        ]
 
     def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
         self._stepURL = stepURL(main_window)

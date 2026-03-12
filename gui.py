@@ -532,7 +532,11 @@ class stepDownload(QDialog):
 		self.setLayout(self.layout)
 
 	def update_batch_button(self):
-		batch_size = 5
+		plugin_instance = getattr(__meta__, "_active_plugin", None)
+		if plugin_instance and hasattr(plugin_instance, "_organizer"):
+			batch_size = int(plugin_instance._organizer.pluginSetting(plugin_instance.name(), "modpage_batch_size") or 5)
+		else:
+			batch_size = 5
 		remaining = len(self.mod_urls_to_open) - (self.current_batch * batch_size)
 		if remaining > 0:
 			next_batch_count = min(batch_size, remaining)
@@ -543,7 +547,11 @@ class stepDownload(QDialog):
 			self.batch_btn.setEnabled(False)
 	
 	def open_next_batch(self):
-		batch_size = 5
+		plugin_instance = getattr(__meta__, "_active_plugin", None)
+		if plugin_instance and hasattr(plugin_instance, "_organizer"):
+			batch_size = int(plugin_instance._organizer.pluginSetting(plugin_instance.name(), "modpage_batch_size") or 5)
+		else:
+			batch_size = 5
 		start_idx = self.current_batch * batch_size
 		end_idx = min(start_idx + batch_size, len(self.mod_urls_to_open))
 		
