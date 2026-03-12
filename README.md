@@ -7,6 +7,7 @@ This plugin parses a NXM collection URL, shows available revisions, and helps yo
 - Choose a specific revision of the collection.
 - View counts for essential, optional, external and bundled resources.
 - Select optional/external items to include before downloading.
+- Opens mod downloads in web browser if the user does not have Premium
 
 #### Currently Unimplemented:
 - FOMOD Selections (need to see if possible)

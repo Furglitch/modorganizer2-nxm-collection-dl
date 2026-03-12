@@ -16,6 +16,7 @@ bundledMods = []
 
 chosenOptional = []
 chosenExternal = True
+openModWebsites = False
 
 def cleanJson(data, visible=False):
     data = json.dumps(data, ensure_ascii=True)

@@ -464,6 +464,11 @@ class stepSummary(QDialog):
 		layout.addWidget(labelExternal)
 		layout.addWidget(labelBundled)
 
+		self.urlCheck = QCheckBox("Open Mod Websites in Browser (Required for non-Premium users)")
+		self.urlCheck.setChecked(False)
+		self.urlCheck.stateChanged.connect(lambda s: setattr(var, "openModWebsites", bool(s)))
+		layout.addWidget(self.urlCheck)
+
 		self.submit_btn = QPushButton("Finish")
 		self.submit_btn.clicked.connect(self.submit)
 		layout.addWidget(self.submit_btn)
@@ -483,26 +488,76 @@ class stepDownload(QDialog):
 
 		self.layout = QVBoxLayout()
 		self.label = QLabel("Preparing to download selected mods...")
-		self.submit_btn = QPushButton("Finish")
-		self.submit_btn.clicked.connect(self.submit)
-		self.layout.addWidget(self.label)
-		self.layout.addWidget(self.submit_btn)
-		self.setLayout(self.layout)
+		
+		self.mod_urls_to_open = []
+		self.current_batch = 0
+		self.batch_btn = None
 
 		plugin_instance = getattr(__meta__, "_active_plugin", None)
 		if plugin_instance is not None:
-			self.submit_btn.setText("Cancel")
-			for mod in (var.essentialMods + var.chosenOptional):
-				plugin_instance.downloadMod(mod)
-				self.label.setText(f"Adding mod to Download Handler: {mod['file']['mod']['name']}")
-			for mod in (var.externalMods):
-				QDesktopServices.openUrl(QUrl(mod['resourceUrl']))
-				self.label.setText(f"Opening external resource URL: {mod['name']}")
+			if var.openModWebsites:
+				# User chose to open websites instead of downloading
+				for mod in (var.essentialMods + var.chosenOptional):
+					mod_id = mod['file']['mod']['modId']
+					mod_url = f"https://www.nexusmods.com/{var.game}/mods/{mod_id}"
+					self.mod_urls_to_open.append((mod['file']['mod']['name'], mod_url))
+				self.label.setText(f"Ready to open {len(self.mod_urls_to_open)} mod website(s) in batches.")
+			else:
+				# Default behavior: add to download manager
+				for mod in (var.essentialMods + var.chosenOptional):
+					plugin_instance.downloadMod(mod)
+					self.label.setText(f"Adding mod to Download Handler: {mod['file']['mod']['name']}")
+				self.label.setText("Mod downloads have been added to the Download Handler.")
+			
+			# Always open external resources
+			if not var.chosenExternal:
+				for mod in (var.externalMods):
+					QDesktopServices.openUrl(QUrl(mod['resourceUrl']))
 		else:
 			qDebug("[NXMColDL] downloadMod called without active plugin instance; Aborting")
 			self.close()
-		self.label.setText("Mod downloads have been added to the Download Handler.")
-		self.submit_btn.setText("Next")
+		
+		self.layout.addWidget(self.label)
+		
+		# Add button for opening mod websites in batches if needed
+		if self.mod_urls_to_open:
+			self.batch_btn = QPushButton()
+			self.batch_btn.clicked.connect(self.open_next_batch)
+			self.layout.addWidget(self.batch_btn)
+			self.update_batch_button()
+		
+		self.submit_btn = QPushButton("Finish")
+		self.submit_btn.clicked.connect(self.submit)
+		self.layout.addWidget(self.submit_btn)
+		self.setLayout(self.layout)
+
+	def update_batch_button(self):
+		batch_size = 5
+		remaining = len(self.mod_urls_to_open) - (self.current_batch * batch_size)
+		if remaining > 0:
+			next_batch_count = min(batch_size, remaining)
+			self.batch_btn.setText(f"Open Next {next_batch_count} Mod Website(s) ({remaining} remaining)")
+			self.batch_btn.setEnabled(True)
+		else:
+			self.batch_btn.setText("All mod websites opened")
+			self.batch_btn.setEnabled(False)
+	
+	def open_next_batch(self):
+		batch_size = 5
+		start_idx = self.current_batch * batch_size
+		end_idx = min(start_idx + batch_size, len(self.mod_urls_to_open))
+		
+		if start_idx >= len(self.mod_urls_to_open):
+			return  # All done
+		
+		# Open current batch
+		for i in range(start_idx, end_idx):
+			mod_name, mod_url = self.mod_urls_to_open[i]
+			QDesktopServices.openUrl(QUrl(mod_url))
+			qDebug(f"[NXMColDL] Opening mod website: {mod_url}")
+		
+		self.current_batch += 1
+		self.update_batch_button()
 
 	def submit(self):
 		self.close()
