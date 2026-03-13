@@ -382,8 +382,12 @@ class stepExternal(QDialog):
 		self.modlist.setMinimumHeight(200)
 		layout.addWidget(self.modlist)
 
+		plugin_instance = getattr(__meta__, "_active_plugin", None)
+		if plugin_instance:
+			var.chosenExternal = plugin_instance._organizer.pluginSetting(plugin_instance.name(), "externalmods_browser_default")
+		
 		self.urlCheck = QCheckBox("Open URLs in Browser")
-		self.urlCheck.setChecked(True)
+		self.urlCheck.setChecked(var.chosenExternal)
 		self.urlCheck.stateChanged.connect(lambda s: setattr(var, "chosenExternal", bool(s)))
 		layout.addWidget(self.urlCheck)
 
@@ -464,8 +468,12 @@ class stepSummary(QDialog):
 		layout.addWidget(labelExternal)
 		layout.addWidget(labelBundled)
 
+		plugin_instance = getattr(__meta__, "_active_plugin", None)
+		if plugin_instance:
+			var.openModWebsites = plugin_instance._organizer.pluginSetting(plugin_instance.name(), "modpage_browser_default")
+		
 		self.urlCheck = QCheckBox("Open Mod Websites in Browser (Required for non-Premium users)")
-		self.urlCheck.setChecked(False)
+		self.urlCheck.setChecked(var.openModWebsites)
 		self.urlCheck.stateChanged.connect(lambda s: setattr(var, "openModWebsites", bool(s)))
 		layout.addWidget(self.urlCheck)
 

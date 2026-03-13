@@ -56,7 +56,9 @@ class PluginInfo(mobase.IPluginTool):
     def settings(self): 
         return [
             mobase.PluginSetting("enabled", "Enable", True),
-            mobase.PluginSetting("modpage_batch_size", "Number of mod websites to open at once", 5)
+            mobase.PluginSetting("modpage_browser_default", "Open mod download sites in browser by default (set True if non-Premium user)", False),
+            mobase.PluginSetting("modpage_batch_size", "Number of mod websites to open at once", 5),
+            mobase.PluginSetting("externalmods_browser_default", "Open external mod URLs in browser by default", True)
         ]
 
     def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
