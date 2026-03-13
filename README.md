@@ -11,6 +11,8 @@ This plugin parses a NXM collection URL, shows available revisions, and helps yo
 
 #### Currently Unimplemented:
 - FOMOD Selections (need to see if possible)
+- Cannot auto-detect user Premium status
+- Unable to implement bundled resources (Not in Nexus API documentation, will check if possible soon.)
 
 ## Installation
 1. Download the [latest release](https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/latest)
