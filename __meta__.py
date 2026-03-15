@@ -1,11 +1,19 @@
-import mobase # type: ignore
+import mobase  # type: ignore
 from PyQt6.QtCore import qDebug
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMainWindow
-from .gui import stepURL
+from .download import stepURL
+from .install import stepSelectCollection
+from pathlib import Path
 
-class PluginInfo(mobase.IPluginTool):
+PLUGIN_VERSION = mobase.VersionInfo(1, 0, 0, mobase.ReleaseType.ALPHA)
 
+
+def icon(icon_name: str) -> QIcon:
+    return QIcon(str(Path(__file__).parent / "icons" / icon_name))
+
+
+class DownloadCollectionTool(mobase.IPluginTool):
     _organizer: mobase.IOrganizer
 
     def __init__(self):
@@ -16,17 +24,20 @@ class PluginInfo(mobase.IPluginTool):
         self._organizer = organizer
         try:
             import sys as _sys
-            _sys.modules[__name__]._active_plugin = self
+
+            _sys.modules[__name__]._download_plugin = self
         except Exception:
             pass
-        self._organizer.onUserInterfaceInitialized(self.onUserInterfaceInitializedCallback)
+        self._organizer.onUserInterfaceInitialized(
+            self.onUserInterfaceInitializedCallback
+        )
         return True
 
     def name(self) -> str:
         return "NXM Collections Downloader"
-    
+
     def displayName(self):
-        return "NXM Collections Downloader"
+        return "NXM Collections/Download Collection"
 
     def author(self) -> str:
         return "Furglitch"
@@ -35,37 +46,105 @@ class PluginInfo(mobase.IPluginTool):
         return "Allows downloading NXM collections directly in MO2"
 
     def version(self) -> mobase.VersionInfo:
-        return mobase.VersionInfo(1, 0, 0, mobase.ReleaseType.ALPHA)
+        return PLUGIN_VERSION
 
     def isActive(self) -> bool:
         return self._organizer.pluginSetting(self.name(), "enabled")
-    
+
     def icon(self):
-        return QIcon()
-    
+        return icon("download.ico")
+
     def tooltip(self):
-        return ""
-    
+        return "Download a Nexus Mods collection"
+
     def setParentWidget(self, widget):
         self._parent = widget
-    
+
     def display(self) -> None:
         dlg = getattr(self, "_stepURL", None) or stepURL()
         dlg.exec()
 
-    def settings(self): 
+    def settings(self):
         return [
             mobase.PluginSetting("enabled", "Enable", True),
-            mobase.PluginSetting("modpage_browser_default", "Open mod download sites in browser by default (set True if non-Premium user)", False),
-            mobase.PluginSetting("modpage_batch_size", "Number of mod websites to open at once", 5),
-            mobase.PluginSetting("externalmods_browser_default", "Open external mod URLs in browser by default", True)
+            mobase.PluginSetting(
+                "modpage_browser_default",
+                "Open mod download sites in browser by default (set True if non-Premium user)",
+                False,
+            ),
+            mobase.PluginSetting(
+                "modpage_batch_size", "Number of mod websites to open at once", 5
+            ),
+            mobase.PluginSetting(
+                "externalmods_browser_default",
+                "Open external mod URLs in browser by default",
+                True,
+            ),
         ]
 
-    def onUserInterfaceInitializedCallback(self, main_window : "QMainWindow"):
+    def onUserInterfaceInitializedCallback(self, main_window: "QMainWindow"):
         self._stepURL = stepURL(main_window)
-        
+
     def downloadMod(self, modInfo: dict):
-        modID = int(modInfo['file']['mod']['modId'])
-        fileID = int(modInfo['file']['fileId'])
+        modID = int(modInfo["file"]["mod"]["modId"])
+        fileID = int(modInfo["file"]["fileId"])
         qDebug(f"Downloading mod {modID} file {fileID}")
         return self._organizer.downloadManager().startDownloadNexusFile(modID, fileID)
+
+
+class InstallCollectionTool(mobase.IPluginTool):
+    _organizer: mobase.IOrganizer
+
+    def __init__(self):
+        super().__init__()
+        self._organizer = None
+
+    def init(self, organizer: mobase.IOrganizer):
+        self._organizer = organizer
+        try:
+            import sys
+
+            sys.modules[__name__]._install_plugin = self
+        except Exception:
+            pass
+        self._organizer.onUserInterfaceInitialized(
+            self.onUserInterfaceInitializedCallback
+        )
+        return True
+
+    def name(self) -> str:
+        return "NXM Collections Installer"
+
+    def displayName(self):
+        return "NXM Collections/Install Downloaded Collection"
+
+    def author(self) -> str:
+        return "Furglitch"
+
+    def description(self) -> str:
+        return self.tooltip()
+
+    def version(self) -> mobase.VersionInfo:
+        return PLUGIN_VERSION
+
+    def isActive(self) -> bool:
+        return self._organizer.pluginSetting(self.name(), "enabled")
+
+    def icon(self):
+        return icon("install.ico")
+
+    def tooltip(self):
+        return "Installs mods from an already downloaded Nexus Mods collection"
+
+    def setParentWidget(self, widget):
+        self._parent = widget
+
+    def display(self) -> None:
+        dlg = getattr(self, "_stepSelectCollection", None) or stepSelectCollection()
+        dlg.exec()
+
+    def settings(self):
+        return [mobase.PluginSetting("enabled", "Enable", True)]
+
+    def onUserInterfaceInitializedCallback(self, main_window: "QMainWindow"):
+        self._stepSelectCollection = stepSelectCollection(main_window)
