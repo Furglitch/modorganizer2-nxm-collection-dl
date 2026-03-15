@@ -1,6 +1,6 @@
 # MO2 Nexus Collection Downloader
-A small Mod Organizer 2 (MO2) plugin that lets you download Nexus Mods (NXM) Collections directly from within MO2.
-This plugin parses a NXM collection URL, shows available revisions, and helps you fetch the mods and resources included in that revision so you can install them in MO2.
+
+A Mod Organizer 2 plugin that lets you download Nexus Mods collections directly within MO2. Simply paste a collection URL, pick a revision, and download the mods you want.
 
 ## Features
 - Enter a NXM collection URL and inspect the collection metadata (name, author, description, thumbnail).
@@ -15,22 +15,24 @@ This plugin parses a NXM collection URL, shows available revisions, and helps yo
 - Unable to implement bundled resources (Not in Nexus API documentation, will check if possible soon.)
 
 ## Installation
-1. Download the [latest release](https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/latest)
-2. Extract the downloaded file into your MO2 `plugins` directory.
-3. In MO2, open the Plugins manager and enable "NXM Collections Downloader" if it is not enabled by default.
-4. Restart MO2 if needed. You should find the tool under the Tools menu.
 
-## Usage
-1. Open the plugin (Tools -> NXM Collections Downloader).
-2. Paste a NXM collection URL (example: `https://www.nexusmods.com/games/skyrimspecialedition/collections/qdurkx`).
-3. Select the collection revision you'd like to install.
-4. Review and select optional/external items as prompted.
-5. Proceed to download/install using MO2's normal workflow (the plugin gathers the mod/file IDs and resources).
+1. Download the [latest release](https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/latest)
+2. Extract it into your MO2 `plugins` folder
+3. Enable "NXM Collections Downloader" in MO2's Plugins manager, if it's not already enabled.
+4. Find it under Tools → NXM Collections Downloader
+
+## How to Use
+
+1. Open the plugin from the Tools menu
+2. Paste a collection URL (e.g., `https://www.nexusmods.com/games/skyrimspecialedition/collections/qdurkx`)
+3. Choose a revision
+4. Select any optional items you want
+5. Download via the 'Download Collection' tool
+   - If you don't have Premium, make sure to check the 'Open in Browser' option to open the mod pages in your web browser for manual downloading.
+6. Install the downloaded mods in MO2 using the 'Install Downloaded Collection' tool.
 
 ## Contributing
 
-Contributions are welcome! If you have suggestions, find bugs, or want to add features, please open an issue or submit a pull request.
+Contributions welcome! Feel free to open issues or submit pull requests.
 
-Development environment can be set up with `uv sync`.
-
-To test, simply copy the plugin files into your MO2 `plugins` directory and enable it. You can then run the plugin from the Tools menu to test its functionality.
+Set up the dev environment with `uv sync`, set up pre-commit hooks, then copy the files to your MO2 plugins directory to test.
