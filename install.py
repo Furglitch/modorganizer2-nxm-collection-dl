@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
-from PyQt6.QtCore import QApplication, Qt, QTimer, qDebug
+
+from PyQt6.QtCore import Qt, QTimer, qDebug
 from PyQt6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QHBoxLayout,
@@ -14,8 +16,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from . import __meta__
-from . import var
+from . import __meta__, var
 
 
 class stepSelectCollection(QDialog):
