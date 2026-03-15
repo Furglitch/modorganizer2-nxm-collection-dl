@@ -54,6 +54,24 @@
       ],
       "LocalePath": [],
       "DataPath": []
+    },
+    {
+      "Version": "1.1.0",
+      "Released": "2026-03-12",
+      "MinSupport": "2.5.2",
+      "MaxSupport": "2.5.2",
+      "MinWorking": "2.5.2",
+      "ReleaseNotes": [
+        "Add plugin settings for 'Open in Browser' checkbox defaults (for external mods and non-Premium users)",
+        "Download progress tracking",
+        "Auto-install mods in collection's sorted order"
+      ],
+      "DownloadUrl": "https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/download/1.1.0/nxm-collection-dl-1.1.0.zip",
+      "PluginPath": [
+        "nxm-collection-dl"
+      ],
+      "LocalePath": [],
+      "DataPath": []
     }
   ]
 }
