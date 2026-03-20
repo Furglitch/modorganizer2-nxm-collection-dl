@@ -61,6 +61,7 @@ def loadThumbnail(thumbnail_url, thumb_label, network_manager=None):
 
 
 def saveCollectionMetadata(base_path: Path):
+    qDebug(f"[NXMColDL] Saving collection metadata for {name}")
     if not all([game, collection, revision]):
         missing = []
         if not game:
@@ -69,9 +70,9 @@ def saveCollectionMetadata(base_path: Path):
             missing.append("collection")
         if not revision:
             missing.append("revision")
-        raise ValueError(
-            f"Missing required collection information: {', '.join(missing)}"
-        )
+        error_msg = f"Missing required collection information: {', '.join(missing)}"
+        qDebug(f"[NXMColDL] {error_msg}")
+        raise ValueError(error_msg)
 
     # Create collections directory structure: <base>/collections/<game>/
     collections_dir = base_path / "collections" / game
@@ -101,6 +102,7 @@ def saveCollectionMetadata(base_path: Path):
     with open(metadata_file, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
 
+    qDebug(f"[NXMColDL] Collection metadata saved to: {metadata_file}")
     return metadata_file
 
 
@@ -121,6 +123,7 @@ def loadCollectionMetadata(
 def listCollectionMetadata(base_path: Path):
     collections_dir = base_path / "collections"
     if not collections_dir.exists():
+        qDebug("[NXMColDL] Collections directory does not exist")
         return []
 
     collections = []

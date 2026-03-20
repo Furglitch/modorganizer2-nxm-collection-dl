@@ -39,12 +39,14 @@ class ModInfoWorker(QObject):
             else:
                 self.finished.emit(mods)
         except Exception as e:
+            qDebug(f"[NXMColDL] Error fetching mod info: {str(e)}")
             self.error.emit(str(e))
 
 
 class stepURL(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        qDebug("[NXMColDL] Initializing stepURL dialog")
         self.setWindowTitle("NXM Collection Downloader - Enter URL")
         self.setMinimumWidth(400)
 
@@ -85,6 +87,7 @@ class stepURL(QDialog):
     def submit(self):
         matched = self.get_url()
         if not matched:
+            qDebug("[NXMColDL] stepURL: URL validation failed")
             QMessageBox.critical(
                 self,
                 "Error",
@@ -102,12 +105,14 @@ class stepURL(QDialog):
 class stepVersion(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        qDebug("[NXMColDL] Initializing stepVersion dialog")
         self.setWindowTitle("NXM Collection Downloader - Select Revision")
         self.setMinimumWidth(300)
         self.network_manager = None
 
         layout = QVBoxLayout()
 
+        qDebug("[NXMColDL] Fetching collection info...")
         collectionData = fetchInfo(var.uri)
 
         qDebug(f"[NXMColDL] Collection Info: {var.cleanJson(collectionData)}")
@@ -166,17 +171,26 @@ class stepVersion(QDialog):
         self.setLayout(layout)
 
     def getList(self):
+        qDebug("[NXMColDL] stepVersion: Fetching revisions list")
         revisions = fetchRevisions(var.uri)
         if revisions:
-            for data in revisions.get("collection", {}).get("revisions", []):
+            revision_list = revisions.get("collection", {}).get("revisions", [])
+            qDebug(
+                f"[NXMColDL] stepVersion: Adding {len(revision_list)} revisions to dropdown"
+            )
+            for data in revision_list:
                 created = (
                     data.get("createdAt", "").split("T")[0]
                     if data.get("createdAt")
                     else ""
                 )
-                self.dropdown.addItem(
-                    f"Revision {data.get('revisionNumber', '?')} ({created})"
+                revision_num = data.get("revisionNumber", "?")
+                self.dropdown.addItem(f"Revision {revision_num} ({created})")
+                qDebug(
+                    f"[NXMColDL] stepVersion: Added revision {revision_num} created on {created}"
                 )
+        else:
+            qDebug("[NXMColDL] stepVersion: No revisions found or fetch failed")
 
     def submit(self):
         revision_text = self.dropdown.currentText()
@@ -201,6 +215,7 @@ class stepVersion(QDialog):
 class stepModCount(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        qDebug("[NXMColDL] Initializing stepModCount dialog")
         self.setWindowTitle("NXM Collection Downloader - Mod Count")
         self.setMinimumWidth(300)
 
@@ -245,6 +260,7 @@ class stepModCount(QDialog):
         self._worker.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
+        qDebug("[NXMColDL] stepModCount: Worker thread started")
 
     def _on_mods_error(self, err):
         qDebug(f"[NXMColDL] Error fetching mods: {err}")
@@ -255,6 +271,7 @@ class stepModCount(QDialog):
         self.bundledLabel.setText("Error loading bundled resources")
 
     def _on_mods_fetched(self, mods):
+        qDebug("[NXMColDL] stepModCount: Processing fetched mod data")
         qDebug(f"[NXMColDL] Mods Info: {var.cleanJson(mods)}")
         for mod in mods.get("collectionRevision", {}).get("modFiles", []):
             if not mod.get("optional"):
@@ -276,6 +293,10 @@ class stepModCount(QDialog):
         externalCount = len(var.externalMods)
         bundledCount = len(var.bundledMods)
 
+        qDebug(
+            f"[NXMColDL] stepModCount: Totals - Essential: {essentialCount}, Optional: {optionalCount}, External: {externalCount}, Bundled: {bundledCount}"
+        )
+
         self.essentialLabel.setText(f"{essentialCount} essential mods")
         self.optionalLabel.setText(f"{optionalCount} optional mods")
         self.externalLabel.setText(f"{externalCount} external resources")
@@ -284,16 +305,24 @@ class stepModCount(QDialog):
         self.submit_btn.setEnabled(True)
 
     def submit(self):
+        qDebug(
+            "[NXMColDL] stepModCount: Proceeding to next dialog based on available mod types"
+        )
         self.close()
         if var.essentialMods:
+            qDebug("[NXMColDL] stepModCount: Opening stepEssential")
             stepEssential(self.parent()).exec()
         elif var.optionalMods:
+            qDebug("[NXMColDL] stepModCount: Opening stepOptional")
             stepOptional(self.parent()).exec()
         elif var.externalMods:
+            qDebug("[NXMColDL] stepModCount: Opening stepExternal")
             stepExternal(self.parent()).exec()
         elif var.bundledMods:
+            qDebug("[NXMColDL] stepModCount: Opening stepBundled")
             stepBundled(self.parent()).exec()
         else:
+            qDebug("[NXMColDL] stepModCount: No mods found, opening stepSummary")
             stepSummary(self.parent()).exec()
 
 
@@ -581,10 +610,12 @@ class stepDownloadProgress(QDialog):
         if not self.is_tracking:
             return
 
+        qDebug(f"[NXMColDL Progress] Download completed: ID {download_id}")
         self.completed_count += 1
         self.update_progress()
 
         if self.completed_count >= self.total_mods:
+            qDebug("[NXMColDL Progress] All downloads completed")
             self.is_tracking = False
 
     def on_download_failed(self, download_id):
@@ -592,11 +623,15 @@ class stepDownloadProgress(QDialog):
         if not self.is_tracking:
             return
 
+        qDebug(f"[NXMColDL Progress] Download failed: ID {download_id}")
         self.failed_count += 1
         self.completed_count += 1
         self.update_progress()
 
         if self.completed_count >= self.total_mods:
+            qDebug(
+                f"[NXMColDL Progress] Download tracking complete. {self.failed_count} failed."
+            )
             self.is_tracking = False
 
     def on_download_removed(self, download_id):
@@ -647,6 +682,9 @@ class stepDownload(QDialog):
 
             if var.openModWebsites:
                 # User chose to open websites instead of downloading
+                qDebug(
+                    "[NXMColDL] stepDownload: Opening mod websites mode (user is non-Premium or chose this option)"
+                )
                 for mod in var.essentialMods + var.chosenOptional:
                     mod_id = mod["file"]["mod"]["modId"]
                     mod_url = f"https://www.nexusmods.com/{var.game}/mods/{mod_id}"
@@ -656,8 +694,18 @@ class stepDownload(QDialog):
                 )
             else:
                 # Queue downloads and show progress tracker
+                qDebug(
+                    "[NXMColDL] stepDownload: Queueing downloads via MO2 download manager"
+                )
                 mods_to_download = var.essentialMods + var.chosenOptional
+                qDebug(f"[NXMColDL] Queueing {len(mods_to_download)} downloads")
                 for mod in mods_to_download:
+                    mod_id = mod["file"]["mod"]["modId"]
+                    file_id = mod["file"]["fileId"]
+                    mod_name = mod["file"]["mod"]["name"]
+                    qDebug(
+                        f"[NXMColDL] stepDownload: Queueing download - ModID: {mod_id}, FileID: {file_id}, Name: {mod_name}"
+                    )
                     plugin_instance.downloadMod(mod)
 
                 self.close()

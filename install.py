@@ -92,6 +92,9 @@ class stepSelectCollection(QDialog):
 
         base_path = Path(plugin_instance._organizer.basePath())
         self.collections_list = var.listCollectionMetadata(base_path)
+        qDebug(
+            f"[NXMColDL] Found {len(self.collections_list)} collection(s) to install"
+        )
 
         if not self.collections_list:
             QMessageBox.information(
@@ -266,6 +269,7 @@ class stepInstallMods(QDialog):
 
     def startInstallation(self):
         """Main installation process"""
+        qDebug(f"[NXMColDL] Starting installation: {var.name}")
         try:
             plugin_instance = getattr(__meta__, "_install_plugin", None)
             if not plugin_instance or not hasattr(plugin_instance, "_organizer"):
@@ -361,6 +365,9 @@ class stepInstallMods(QDialog):
             self.log(f"  Total mods: {len(mods_to_install)}")
             self.log(f"  Successfully installed: {len(installed_mods)}")
             self.log(f"  Failed/Skipped: {len(mods_to_install) - len(installed_mods)}")
+            qDebug(
+                f"[NXMColDL] Installation complete: {len(installed_mods)}/{len(mods_to_install)} succeeded"
+            )
 
             if len(installed_mods) < len(mods_to_install):
                 self.log("", "warning")
@@ -371,10 +378,6 @@ class stepInstallMods(QDialog):
 
         except Exception as e:
             self.log(f"Fatal error during installation: {e}", "error")
-            import traceback
-
-            self.log(traceback.format_exc(), "error")
-
         finally:
             self.close_btn.setEnabled(True)
 
@@ -383,8 +386,10 @@ class stepInstallMods(QDialog):
 
         if not downloads_path.exists():
             self.log(f"Downloads directory does not exist: {downloads_path}", "error")
+            qDebug(f"[NXMColDL] Downloads path not found: {downloads_path}")
             return download_map
 
+        qDebug(f"[NXMColDL] Building download map from: {downloads_path}")
         # Iterate through all .meta files in downloads directory
         for meta_file in downloads_path.glob("*.meta"):
             try:

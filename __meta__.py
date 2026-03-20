@@ -22,6 +22,7 @@ class DownloadCollectionTool(mobase.IPluginTool):
 
     def init(self, organizer: mobase.IOrganizer):
         self._organizer = organizer
+        qDebug("[NXMColDL] Initializing Download Collection plugin")
         try:
             import sys as _sys
 
@@ -88,7 +89,7 @@ class DownloadCollectionTool(mobase.IPluginTool):
     def downloadMod(self, modInfo: dict):
         modID = int(modInfo["file"]["mod"]["modId"])
         fileID = int(modInfo["file"]["fileId"])
-        qDebug(f"Downloading mod {modID} file {fileID}")
+        qDebug(f"[NXMColDL] Downloading mod {modID} file {fileID}")
         return self._organizer.downloadManager().startDownloadNexusFile(modID, fileID)
 
 
@@ -101,6 +102,7 @@ class InstallCollectionTool(mobase.IPluginTool):
 
     def init(self, organizer: mobase.IOrganizer):
         self._organizer = organizer
+        qDebug("[NXMColDL] Initializing Install Collection plugin")
         try:
             import sys
 

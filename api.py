@@ -4,6 +4,7 @@ from PyQt6.QtCore import qDebug
 
 from . import var
 
+
 def nxmFetch(requestData):
     jsonData = json.dumps(requestData).encode("utf-8")
     headers = {
@@ -11,17 +12,25 @@ def nxmFetch(requestData):
         "Accept": "application/json",
         "Content-type": "application/json",
     }
-    request = urllib.request.Request("https://api.nexusmods.com/v2/graphql", data=jsonData, headers=headers)
+    request = urllib.request.Request(
+        "https://api.nexusmods.com/v2/graphql", data=jsonData, headers=headers
+    )
     try:
         with urllib.request.urlopen(request) as response:
             content = response.read()
             resp = json.loads(content)
             qDebug(var.cleanJson(resp))
+            if "errors" in resp:
+                qDebug(f"[NXMColDL] API returned errors: {resp['errors']}")
             return resp.get("data")
     except (urllib.error.HTTPError, urllib.error.URLError) as e:
         qDebug(f"[NXMColDL] Error fetching data: {str(e)}")
         return None
-    
+    except Exception as e:
+        qDebug(f"[NXMColDL] Unexpected error: {str(e)}")
+        return None
+
+
 def fetchRevisions(url):
     qDebug(f"[NXMColDL] Fetching revisions for {url}")
     query = """
@@ -36,13 +45,11 @@ def fetchRevisions(url):
             """
     jsonData = {
         "query": query,
-        "variables": {
-            "domainName": var.game,
-            "slug": var.collection
-        },
-        "operationName": "CollectionRevisions"
+        "variables": {"domainName": var.game, "slug": var.collection},
+        "operationName": "CollectionRevisions",
     }
     return nxmFetch(jsonData)
+
 
 def fetchInfo(url):
     qDebug(f"[NXMColDL] Fetching collection info for {url}")
@@ -62,16 +69,14 @@ def fetchInfo(url):
             """
     jsonData = {
         "query": query,
-        "variables": {
-            "domainName": var.game,
-            "slug": var.collection
-        },
-        "operationName": "CollectionManifestInfo"
+        "variables": {"domainName": var.game, "slug": var.collection},
+        "operationName": "CollectionManifestInfo",
     }
     return nxmFetch(jsonData)
 
+
 def fetchModInfo(url):
-    qDebug(f"[NXMColDL] Fetching collection info for {url}")
+    qDebug(f"[NXMColDL] Fetching mod info for {url}")
     query = """
             query CollectionRevisionMods($revision: Int, $slug: String!, $viewAdultContent: Boolean) {
                 collectionRevision(revision: $revision, slug: $slug, viewAdultContent: $viewAdultContent) {
@@ -121,6 +126,6 @@ def fetchModInfo(url):
             "slug": var.collection,
             "viewAdultContent": True,
         },
-        "operationName": "CollectionRevisionMods"
+        "operationName": "CollectionRevisionMods",
     }
     return nxmFetch(jsonData)
