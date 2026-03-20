@@ -44,7 +44,7 @@ body:
     validations:
       required: true
   - type: input
-    id: version
+    id: collection
     attributes:
       label: Desired Collection
       description: Add the complete link of the collection you are trying to download
