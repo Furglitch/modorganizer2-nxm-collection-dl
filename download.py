@@ -180,10 +180,22 @@ class stepVersion(QDialog):
 
     def submit(self):
         revision_text = self.dropdown.currentText()
-        var.revision = int(revision_text.replace("Revision ", "").split(" (")[0])
-        qDebug(f"[NXMColDL] Selected Revision: {var.revision}")
-        self.close()
-        stepModCount(self.parent()).exec()
+        if not revision_text:
+            qDebug("[NXMColDL] No revision selected")
+            return
+
+        try:
+            revision_str = revision_text.replace("Revision ", "").split(" (")[0].strip()
+            if not revision_str or revision_str == "?":
+                qDebug(f"[NXMColDL] Invalid revision text: {revision_text}")
+                return
+            var.revision = int(revision_str)
+            qDebug(f"[NXMColDL] Selected Revision: {var.revision}")
+            self.close()
+            stepModCount(self.parent()).exec()
+        except (ValueError, IndexError) as e:
+            qDebug(f"[NXMColDL] Failed to parse revision from '{revision_text}': {e}")
+            return
 
 
 class stepModCount(QDialog):
