@@ -256,19 +256,22 @@ class stepSelectCollection(QDialog):
             self.close()
             return
 
-        # Populate dropdown
+        # Populate dropdown with enough detail to distinguish concurrent
+        # collection downloads for the same game.
         for game, collection_id, revision, metadata_file in self.collections_list:
-            # Load metadata to get the display name
             try:
                 with open(metadata_file, "r", encoding="utf-8") as f:
                     metadata = json.load(f)
                     name = metadata.get("name", collection_id)
-                    # author = metadata.get("author", "Unknown")
-                    display_text = f"{name} (Rev {revision}) - {game}"
+                    total_mods = metadata.get("totalMods", "?")
+                    display_text = (
+                        f"{name} [{collection_id} rev {revision}, "
+                        f"{total_mods} mods] - {game}"
+                    )
                     self.dropdown.addItem(display_text)
             except Exception as e:
                 qDebug(f"[NXMColDL] Error loading metadata from {metadata_file}: {e}")
-                self.dropdown.addItem(f"{collection_id} (Rev {revision}) - {game}")
+                self.dropdown.addItem(f"{collection_id} [rev {revision}] - {game}")
 
         # Trigger initial selection
         if self.dropdown.count() > 0:
@@ -310,6 +313,8 @@ class stepSelectCollection(QDialog):
 				<br>
 				<br>
 				<b>Total Mods:</b> {total_mods}
+				<br>
+				<b>Collection:</b> {collection_id} rev {revision}
 				<br>
 				<b>Downloaded:</b> {timestamp.split("T")[0] if "T" in timestamp else timestamp}
 			""")

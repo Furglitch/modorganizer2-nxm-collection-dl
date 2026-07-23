@@ -153,4 +153,13 @@ def listCollectionMetadata(base_path: Path):
                     )
                     continue
 
-    return collections
+    def metadata_sort_key(collection_info):
+        metadata_file = collection_info[3]
+        try:
+            with open(metadata_file, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+            return metadata.get("timestamp") or metadata_file.stat().st_mtime
+        except Exception:
+            return metadata_file.stat().st_mtime
+
+    return sorted(collections, key=metadata_sort_key, reverse=True)
