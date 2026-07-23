@@ -1,9 +1,11 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, qDebug
 from PyQt6.QtWidgets import (
     QApplication,
+    QDialogButtonBox,
     QComboBox,
     QDialog,
     QHBoxLayout,
@@ -17,6 +19,147 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __meta__, var
+
+MO2_WARNING_PATTERNS = (
+    "Plugin not found:",
+    "invalid origin name:",
+    "[fomodinstallerdialog.cpp:",
+)
+
+
+def clickButtonByText(widget, texts):
+    wanted = {text.lower() for text in texts}
+    for button in widget.findChildren(QPushButton):
+        label = button.text().replace("&", "").strip().lower()
+        if label in wanted and button.isEnabled():
+            suppressDialogAndClick(widget, button)
+            return True
+    return False
+
+
+def suppressDialogAndClick(widget, button):
+    widget.setUpdatesEnabled(False)
+    widget.hide()
+    QApplication.processEvents()
+    button.click()
+
+
+def acceptQuickInstallDialog():
+    for widget in QApplication.topLevelWidgets():
+        if not widget.isVisible() or widget.windowTitle() != "Quick Install":
+            continue
+
+        for button_box in widget.findChildren(QDialogButtonBox):
+            button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+            if button and button.isEnabled():
+                qDebug("[NXMColDL Install] Auto-accepting Quick Install dialog")
+                suppressDialogAndClick(widget, button)
+                return
+
+        for button in widget.findChildren(QPushButton):
+            if button.text().replace("&", "").lower() == "ok" and button.isEnabled():
+                qDebug("[NXMColDL Install] Auto-accepting Quick Install dialog")
+                suppressDialogAndClick(widget, button)
+                return
+
+
+def dismissKnownPostInstallErrorDialog(remaining=20):
+    if remaining <= 0:
+        return
+
+    for widget in QApplication.topLevelWidgets():
+        if not widget.isVisible() or widget.windowTitle() != "Error":
+            continue
+
+        labels = widget.findChildren(QLabel)
+        if not any(
+            "invalid origin name:" in label.text()
+            or "Plugin not found:" in label.text()
+            for label in labels
+        ):
+            continue
+
+        for button_box in widget.findChildren(QDialogButtonBox):
+            button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+            if button and button.isEnabled():
+                qDebug("[NXMColDL Install] Dismissing known post-install error dialog")
+                suppressDialogAndClick(widget, button)
+                return
+
+        for button in widget.findChildren(QPushButton):
+            if button.text().replace("&", "").lower() == "ok" and button.isEnabled():
+                qDebug("[NXMColDL Install] Dismissing known post-install error dialog")
+                suppressDialogAndClick(widget, button)
+                return
+
+    QTimer.singleShot(250, lambda: dismissKnownPostInstallErrorDialog(remaining - 1))
+
+
+def acceptModExistsDialog():
+    for widget in QApplication.topLevelWidgets():
+        if not widget.isVisible() or widget.windowTitle() != "Mod Exists":
+            continue
+
+        if clickButtonByText(widget, ("Merge",)):
+            qDebug("[NXMColDL Install] Auto-merging Mod Exists dialog")
+            return
+
+
+def acceptDefaultInstallerDialog(remaining=80):
+    if remaining <= 0:
+        return
+
+    for widget in QApplication.topLevelWidgets():
+        if not widget.isVisible():
+            continue
+
+        title = widget.windowTitle()
+        if title in ("Error", "Quick Install") or title.startswith(
+            "NXM Collection Installer"
+        ):
+            continue
+
+        buttons = widget.findChildren(QPushButton)
+        button_by_text = {
+            button.text().replace("&", "").strip().lower(): button for button in buttons
+        }
+
+        # MO2 installer/FOMOD dialogs expose Next/Install buttons. Accept the
+        # already selected defaults, but do not click unrelated ordinary dialogs.
+        next_button = button_by_text.get("next")
+        install_button = button_by_text.get("install")
+        if next_button and next_button.isEnabled():
+            qDebug(f"[NXMColDL Install] Auto-accepting default installer page: {title}")
+            suppressDialogAndClick(widget, next_button)
+            QTimer.singleShot(300, lambda: acceptDefaultInstallerDialog(remaining - 1))
+            return
+
+        if install_button and install_button.isEnabled():
+            qDebug(
+                f"[NXMColDL Install] Auto-accepting default installer install: {title}"
+            )
+            suppressDialogAndClick(widget, install_button)
+            QTimer.singleShot(300, lambda: acceptDefaultInstallerDialog(remaining - 1))
+            return
+
+    QTimer.singleShot(300, lambda: acceptDefaultInstallerDialog(remaining - 1))
+
+
+def scheduleInstallDialogHandlers(
+    auto_accept_quick_install=True,
+    auto_dismiss_known_post_install_errors=True,
+    auto_accept_fomod_defaults=False,
+    auto_merge_existing_mods=True,
+):
+    for delay in (250, 750, 1500, 3000, 5000):
+        if auto_accept_quick_install:
+            QTimer.singleShot(delay, acceptQuickInstallDialog)
+        if auto_dismiss_known_post_install_errors:
+            QTimer.singleShot(delay, dismissKnownPostInstallErrorDialog)
+        if auto_merge_existing_mods:
+            QTimer.singleShot(delay, acceptModExistsDialog)
+    if auto_accept_fomod_defaults:
+        QTimer.singleShot(250, acceptDefaultInstallerDialog)
 
 
 class stepSelectCollection(QDialog):
@@ -250,6 +393,7 @@ class stepInstallMods(QDialog):
         layout.addWidget(self.close_btn)
 
         self.setLayout(layout)
+        self.install_warnings = []
 
         # Start installation after dialog is shown
         QTimer.singleShot(100, self.startInstallation)
@@ -266,6 +410,57 @@ class stepInstallMods(QDialog):
         self.log_text.append(f'<span style="color: {color};">{message}</span>')
         qDebug(f"[NXMColDL Install] {message}")
         QApplication.processEvents()
+
+    def interfaceLogPath(self, organizer):
+        return Path(organizer.downloadsPath()).parent / "logs" / "mo_interface.log"
+
+    def captureInterfaceLogPosition(self, organizer):
+        log_path = self.interfaceLogPath(organizer)
+        try:
+            return log_path, log_path.stat().st_size
+        except OSError:
+            return log_path, 0
+
+    def collectInterfaceLogWarnings(self, log_path, offset, mod_name, file_name):
+        captured = 0
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as log_file:
+                log_file.seek(offset)
+                for line in log_file:
+                    line = line.rstrip()
+                    if not any(pattern in line for pattern in MO2_WARNING_PATTERNS):
+                        continue
+                    warning = {
+                        "mod": mod_name,
+                        "file": file_name,
+                        "message": line,
+                    }
+                    self.install_warnings.append(warning)
+                    captured += 1
+        except OSError as e:
+            qDebug(f"[NXMColDL Install] Could not read MO2 interface log: {e}")
+        return captured
+
+    def writeWarningReport(self, organizer):
+        if not self.install_warnings:
+            return None
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        report_path = (
+            self.interfaceLogPath(organizer).parent
+            / f"nxm-collection-install-warnings-{var.collection}-{var.revision}-{timestamp}.json"
+        )
+        report = {
+            "collection": var.collection,
+            "revision": var.revision,
+            "name": var.name,
+            "generated": datetime.now().isoformat(timespec="seconds"),
+            "warning_count": len(self.install_warnings),
+            "warnings": self.install_warnings,
+        }
+        with open(report_path, "w", encoding="utf-8") as report_file:
+            json.dump(report, report_file, indent=2)
+        return report_path
 
     def startInstallation(self):
         """Main installation process"""
@@ -301,10 +496,14 @@ class stepInstallMods(QDialog):
             # Build a mapping of (modId, fileId) -> download_path
             download_map = self.buildDownloadMap(downloads_path)
             self.log(f"Found {len(download_map)} downloaded files")
+
+            installed_map = self.buildInstalledMap(Path(organizer.modsPath()))
+            self.log(f"Found {len(installed_map)} installed Nexus file records")
             self.log("")
 
             # Install each mod in order
             installed_mods = []
+            mods_to_activate = []
             for idx, mod_info in enumerate(mods_to_install, 1):
                 self.progress_label.setText(
                     f"Installing mod {idx}/{len(mods_to_install)}"
@@ -319,42 +518,112 @@ class stepInstallMods(QDialog):
                 self.log(f"[{idx}/{len(mods_to_install)}] Processing: {mod_name}")
                 self.log(f"  File: {file_name} (ModID: {mod_id}, FileID: {file_id})")
 
+                install_key = (int(mod_id), int(file_id))
+                if install_key in installed_map:
+                    internal_name = installed_map[install_key]
+                    self.log(f"  Already installed as: {internal_name}", "success")
+                    self.log("")
+                    installed_mods.append(internal_name)
+                    activate_after_install = organizer.pluginSetting(
+                        plugin_instance.name(), "activate_mods_after_install"
+                    )
+                    if activate_after_install:
+                        mods_to_activate.append(internal_name)
+                    continue
+
                 # Find downloaded file
-                download_key = (int(mod_id), int(file_id))
-                if download_key not in download_map:
+                if install_key not in download_map:
                     self.log("  ERROR: Not found in downloads - skipping", "error")
                     self.log("")
                     continue
 
-                download_path = download_map[download_key]
+                download_path = download_map[install_key]
                 self.log(f"  Found: {download_path.name}")
 
                 # Install the mod
+                log_path, log_offset = self.captureInterfaceLogPosition(organizer)
                 try:
-                    installed_mod = organizer.installMod(str(download_path), mod_name)
+                    auto_accept_quick_install = organizer.pluginSetting(
+                        plugin_instance.name(), "auto_accept_quick_install"
+                    )
+                    auto_dismiss_known_post_install_errors = organizer.pluginSetting(
+                        plugin_instance.name(),
+                        "auto_dismiss_known_post_install_errors",
+                    )
+                    auto_accept_fomod_defaults = organizer.pluginSetting(
+                        plugin_instance.name(), "auto_accept_fomod_defaults"
+                    )
+                    auto_merge_existing_mods = organizer.pluginSetting(
+                        plugin_instance.name(), "auto_merge_existing_mods"
+                    )
+                    activate_after_install = organizer.pluginSetting(
+                        plugin_instance.name(), "activate_mods_after_install"
+                    )
+                    scheduleInstallDialogHandlers(
+                        auto_accept_quick_install,
+                        auto_dismiss_known_post_install_errors,
+                        auto_accept_fomod_defaults,
+                        auto_merge_existing_mods,
+                    )
+
+                    installed_mod = organizer.installMod(str(download_path))
+                    warning_count = self.collectInterfaceLogWarnings(
+                        log_path, log_offset, mod_name, file_name
+                    )
+                    if warning_count:
+                        self.log(
+                            f"  Captured {warning_count} MO2 warning(s) for report",
+                            "warning",
+                        )
                     if installed_mod:
                         internal_name = installed_mod.name()
-                        modlist.setActive(internal_name, True)
                         self.log(f"  Installed as: {internal_name}", "success")
 
-                        # Set priority to maintain collection order
-                        target_priority = base_priority + len(installed_mods)
-                        if modlist.setPriority(internal_name, target_priority):
-                            self.log(f"  Priority set to: {target_priority}", "success")
-                        else:
-                            self.log(
-                                f"  WARNING: Failed to set priority to {target_priority}",
-                                "warning",
-                            )
+                        self.log(
+                            "  Priority unchanged; MO2 appended the mod to the list",
+                            "warning",
+                        )
 
                         installed_mods.append(internal_name)
+                        if activate_after_install:
+                            mods_to_activate.append(internal_name)
                     else:
                         self.log(
                             "  ERROR: Installation failed or was cancelled", "error"
                         )
                 except Exception as e:
+                    warning_count = self.collectInterfaceLogWarnings(
+                        log_path, log_offset, mod_name, file_name
+                    )
+                    if warning_count:
+                        self.log(
+                            f"  Captured {warning_count} MO2 warning(s) for report",
+                            "warning",
+                        )
                     self.log(f"  ERROR: Installation error: {e}", "error")
 
+                self.log("")
+
+            if mods_to_activate:
+                self.progress_label.setText("Activating installed mods...")
+                self.log(f"Activating {len(mods_to_activate)} installed mods...")
+                log_path, log_offset = self.captureInterfaceLogPosition(organizer)
+                for internal_name in mods_to_activate:
+                    try:
+                        modlist.setActive(internal_name, True)
+                    except Exception as e:
+                        self.log(
+                            f"  ERROR: Could not activate {internal_name}: {e}",
+                            "error",
+                        )
+                warning_count = self.collectInterfaceLogWarnings(
+                    log_path, log_offset, "post-install activation", ""
+                )
+                if warning_count:
+                    self.log(
+                        f"  Captured {warning_count} MO2 warning(s) during activation",
+                        "warning",
+                    )
                 self.log("")
 
             # Final summary
@@ -365,6 +634,10 @@ class stepInstallMods(QDialog):
             self.log(f"  Total mods: {len(mods_to_install)}")
             self.log(f"  Successfully installed: {len(installed_mods)}")
             self.log(f"  Failed/Skipped: {len(mods_to_install) - len(installed_mods)}")
+            self.log(f"  MO2 warnings captured: {len(self.install_warnings)}")
+            report_path = self.writeWarningReport(organizer)
+            if report_path:
+                self.log(f"  Warning report: {report_path}", "warning")
             qDebug(
                 f"[NXMColDL] Installation complete: {len(installed_mods)}/{len(mods_to_install)} succeeded"
             )
@@ -399,6 +672,14 @@ class stepInstallMods(QDialog):
                 # Only consider files that exist and are not directories
                 if not download_file.exists() or download_file.is_dir():
                     continue
+                if download_file.name.endswith(".unfinished"):
+                    qDebug(
+                        f"[NXMColDL] Skipping unfinished download: {download_file.name}"
+                    )
+                    continue
+                if download_file.stat().st_size == 0:
+                    qDebug(f"[NXMColDL] Skipping empty download: {download_file.name}")
+                    continue
 
                 # Parse the .meta file (it's an INI-style file)
                 mod_id = None
@@ -429,3 +710,33 @@ class stepInstallMods(QDialog):
                 qDebug(f"[NXMColDL] Unexpected error parsing {meta_file.name}: {e}")
 
         return download_map
+
+    def buildInstalledMap(self, mods_path: Path):
+        installed_map = {}
+
+        if not mods_path.exists():
+            qDebug(f"[NXMColDL] Mods path not found: {mods_path}")
+            return installed_map
+
+        for meta_file in mods_path.glob("*/meta.ini"):
+            mod_id = None
+            file_ids = []
+            try:
+                with open(meta_file, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("modid="):
+                            mod_id = int(line.split("=", 1)[1])
+                        elif "\\fileid=" in line:
+                            file_ids.append(int(line.split("=", 1)[1]))
+
+                if mod_id is None:
+                    continue
+
+                for file_id in file_ids:
+                    installed_map[(mod_id, file_id)] = meta_file.parent.name
+
+            except (ValueError, IOError) as e:
+                qDebug(f"[NXMColDL] Error parsing installed metadata {meta_file}: {e}")
+
+        return installed_map

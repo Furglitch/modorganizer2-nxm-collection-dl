@@ -146,7 +146,34 @@ class InstallCollectionTool(mobase.IPluginTool):
         dlg.exec()
 
     def settings(self):
-        return [mobase.PluginSetting("enabled", "Enable", True)]
+        return [
+            mobase.PluginSetting("enabled", "Enable", True),
+            mobase.PluginSetting(
+                "auto_accept_quick_install",
+                "Automatically accept MO2 Quick Install dialogs",
+                True,
+            ),
+            mobase.PluginSetting(
+                "auto_dismiss_known_post_install_errors",
+                "Automatically dismiss known MO2 post-install error dialogs",
+                True,
+            ),
+            mobase.PluginSetting(
+                "auto_accept_fomod_defaults",
+                "Automatically accept default selections in MO2 installer dialogs",
+                True,
+            ),
+            mobase.PluginSetting(
+                "auto_merge_existing_mods",
+                "Automatically merge when MO2 reports that a mod already exists",
+                True,
+            ),
+            mobase.PluginSetting(
+                "activate_mods_after_install",
+                "Activate installed mods after the collection install pass completes",
+                False,
+            ),
+        ]
 
     def onUserInterfaceInitializedCallback(self, main_window: "QMainWindow"):
         self._stepSelectCollection = stepSelectCollection(main_window)

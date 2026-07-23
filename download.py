@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from PyQt6.QtCore import QObject, QSize, QThread, Qt, QUrl, pyqtSignal, qDebug
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
@@ -274,6 +275,24 @@ class stepModCount(QDialog):
         qDebug("[NXMColDL] stepModCount: Processing fetched mod data")
         qDebug(f"[NXMColDL] Mods Info: {var.cleanJson(mods)}")
         for mod in mods.get("collectionRevision", {}).get("modFiles", []):
+            mod_info = mod.get("file", {}).get("mod", {})
+            mod_domain = mod_info.get("game", {}).get("domainName")
+            if mod_domain and mod_domain != var.game:
+                mod_id = mod_info.get("modId")
+                var.externalMods.append(
+                    {
+                        "id": mod_id,
+                        "name": mod_info.get("name", "External Nexus resource"),
+                        "resourceType": f"Nexus {mod_domain}",
+                        "resourceUrl": f"https://www.nexusmods.com/{mod_domain}/mods/{mod_id}",
+                    }
+                )
+                qDebug(
+                    "[NXMColDL] Cross-domain mod added as external resource: "
+                    f"{mod_info.get('name')} ({mod_domain})"
+                )
+                continue
+
             if not mod.get("optional"):
                 var.essentialMods.append(mod)
                 qDebug(f"[NXMColDL] Essential mod added: {mod['file']['mod']['name']}")
@@ -675,6 +694,19 @@ class stepDownload(QDialog):
 
         plugin_instance = getattr(__meta__, "_download_plugin", None)
         if plugin_instance is not None:
+            try:
+                base_path = Path(plugin_instance._organizer.basePath())
+                metadata_file = var.saveCollectionMetadata(base_path)
+                qDebug(f"[NXMColDL] Collection metadata saved to: {metadata_file}")
+            except (ValueError, IOError) as e:
+                qDebug(f"[NXMColDL] Failed to save collection metadata: {e}")
+                QMessageBox.warning(
+                    self,
+                    "Warning",
+                    f"Failed to save collection metadata:\n\n{e}\n\n"
+                    "You will not be able to install this collection automatically later.",
+                )
+
             # Always open external resources if user chose to
             if var.chosenExternal and var.externalMods:
                 for mod in var.externalMods:
@@ -714,22 +746,6 @@ class stepDownload(QDialog):
                 )
                 progress_dialog.exec()
                 return
-
-            # Save collection metadata for later installation
-            try:
-                from pathlib import Path
-
-                base_path = Path(plugin_instance._organizer.basePath())
-                metadata_file = var.saveCollectionMetadata(base_path)
-                qDebug(f"[NXMColDL] Collection metadata saved to: {metadata_file}")
-            except (ValueError, IOError) as e:
-                qDebug(f"[NXMColDL] Failed to save collection metadata: {e}")
-                QMessageBox.warning(
-                    self,
-                    "Warning",
-                    f"Failed to save collection metadata:\n\n{e}\n\n"
-                    "You will not be able to install this collection automatically later.",
-                )
         else:
             qDebug(
                 "[NXMColDL] downloadMod called without active plugin instance; Aborting"
