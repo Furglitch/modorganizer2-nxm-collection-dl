@@ -26,6 +26,11 @@ MO2_WARNING_PATTERNS = (
     "[fomodinstallerdialog.cpp:",
 )
 
+EXPECTED_INSTALL_EXCEPTION_PATTERNS = (
+    "invalid origin name:",
+    "Plugin not found:",
+)
+
 
 def clickButtonByText(widget, texts):
     wanted = {text.lower() for text in texts}
@@ -411,6 +416,18 @@ class stepInstallMods(QDialog):
         qDebug(f"[NXMColDL Install] {message}")
         QApplication.processEvents()
 
+    def logInstallIssue(self, message, expected=False):
+        """Log install issues without making expected MO2 chatter look fatal."""
+        prefix = "NOTE" if expected else "ERROR"
+        level = "warning" if expected else "error"
+        self.log(f"  {prefix}: {message}", level)
+
+    def isExpectedInstallException(self, error):
+        message = str(error)
+        return any(
+            pattern in message for pattern in EXPECTED_INSTALL_EXCEPTION_PATTERNS
+        )
+
     def interfaceLogPath(self, organizer):
         return Path(organizer.downloadsPath()).parent / "logs" / "mo_interface.log"
 
@@ -533,7 +550,7 @@ class stepInstallMods(QDialog):
 
                 # Find downloaded file
                 if install_key not in download_map:
-                    self.log("  ERROR: Not found in downloads - skipping", "error")
+                    self.logInstallIssue("Not found in downloads - skipping")
                     self.log("")
                     continue
 
@@ -588,8 +605,8 @@ class stepInstallMods(QDialog):
                         if activate_after_install:
                             mods_to_activate.append(internal_name)
                     else:
-                        self.log(
-                            "  ERROR: Installation failed or was cancelled", "error"
+                        self.logInstallIssue(
+                            "Installation failed or was cancelled", expected=True
                         )
                 except Exception as e:
                     warning_count = self.collectInterfaceLogWarnings(
@@ -600,7 +617,10 @@ class stepInstallMods(QDialog):
                             f"  Captured {warning_count} MO2 warning(s) for report",
                             "warning",
                         )
-                    self.log(f"  ERROR: Installation error: {e}", "error")
+                    self.logInstallIssue(
+                        f"Installation issue: {e}",
+                        expected=self.isExpectedInstallException(e),
+                    )
 
                 self.log("")
 
@@ -612,10 +632,7 @@ class stepInstallMods(QDialog):
                     try:
                         modlist.setActive(internal_name, True)
                     except Exception as e:
-                        self.log(
-                            f"  ERROR: Could not activate {internal_name}: {e}",
-                            "error",
-                        )
+                        self.logInstallIssue(f"Could not activate {internal_name}: {e}")
                 warning_count = self.collectInterfaceLogWarnings(
                     log_path, log_offset, "post-install activation", ""
                 )
