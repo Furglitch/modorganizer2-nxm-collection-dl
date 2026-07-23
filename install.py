@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import mobase
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QApplication,
@@ -618,8 +619,7 @@ class stepInstallMods(QDialog):
                 internal_name = installed_mod.name()
                 self.log(f"  Installed as: {internal_name}", "success")
                 self.log(
-                    "  Priority unchanged; MO2 appended the mod to the list",
-                    "warning",
+                    "  Priority will be checked after collection install",
                 )
                 used_mod_names.add(internal_name)
                 installed_mods.append(internal_name)
@@ -658,7 +658,15 @@ class stepInstallMods(QDialog):
         installed_mods = context["installed_mods"]
         mods_to_activate = context["mods_to_activate"]
         activation_enabled = context["activation_enabled"]
+        priority_order = None
         activated_count = 0
+        plugin_activation = None
+
+        if installed_mods:
+            priority_order = self.reconcileCollectionPriorityOrder(
+                modlist, installed_mods
+            )
+            self.log("")
 
         if mods_to_activate:
             self.progress_label.setText("Activating installed mods...")
@@ -679,6 +687,10 @@ class stepInstallMods(QDialog):
                     f"  Captured {warning_count} MO2 warning(s) during activation",
                     "warning",
                 )
+            if activation_enabled:
+                plugin_activation = self.activatePluginsForMods(
+                    organizer, mods_to_activate
+                )
             self.log("")
 
         self.progress_bar.setValue(len(mods_to_install))
@@ -695,8 +707,22 @@ class stepInstallMods(QDialog):
         self.log(f"  Collection file entries: {len(mods_to_install)}")
         self.log(f"  Entries installed/already present: {len(installed_mods)}")
         self.log(f"  MO2 mod containers touched: {installed_containers}")
+        if priority_order:
+            self.log(
+                "  Collection priority order: "
+                f"{priority_order['verified']} verified, "
+                f"{priority_order['moved']} moved, "
+                f"{priority_order['failed']} failed"
+            )
         if activation_enabled:
             self.log(f"  Activated installed mods: {activated_count}")
+            if plugin_activation:
+                self.log(
+                    "  Plugins from activated mods: "
+                    f"{plugin_activation['activated']} activated, "
+                    f"{plugin_activation['already_active']} already active, "
+                    f"{plugin_activation['blocked']} blocked"
+                )
         else:
             self.log("  Activated installed mods: 0 (activation disabled)")
         self.log(
@@ -719,6 +745,136 @@ class stepInstallMods(QDialog):
 
         self.close_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
+
+    def reconcileCollectionPriorityOrder(self, modlist, installed_mods):
+        ordered_mods = list(dict.fromkeys(installed_mods))
+        result = {"verified": 0, "moved": 0, "failed": 0}
+        if len(ordered_mods) < 2:
+            result["verified"] = len(ordered_mods)
+            return result
+
+        priority_by_mod = {}
+        missing_mods = []
+        for mod_name in ordered_mods:
+            try:
+                priority_by_mod[mod_name] = modlist.priority(mod_name)
+            except Exception as e:
+                missing_mods.append(mod_name)
+                self.logInstallIssue(
+                    f"Could not read priority for {mod_name}: {e}",
+                    expected=True,
+                )
+
+        present_mods = [name for name in ordered_mods if name in priority_by_mod]
+        if not present_mods:
+            result["failed"] = len(missing_mods)
+            return result
+
+        current_priorities = [priority_by_mod[name] for name in present_mods]
+        if current_priorities == sorted(current_priorities):
+            result["verified"] = len(present_mods)
+            result["failed"] = len(missing_mods)
+            self.log(
+                f"Collection priority order verified for {len(present_mods)} mods",
+                "success",
+            )
+            return result
+
+        target_priority = min(current_priorities)
+        self.log(
+            "Collection priority order differed from the manifest; repairing...",
+            "warning",
+        )
+
+        # Moving each touched mod to the block start in reverse manifest order
+        # yields the requested ascending priority order while keeping the
+        # collection as one contiguous block.
+        for mod_name in reversed(present_mods):
+            try:
+                if modlist.setPriority(mod_name, target_priority):
+                    result["moved"] += 1
+                else:
+                    result["failed"] += 1
+                    self.logInstallIssue(
+                        f"Could not set priority for {mod_name}",
+                        expected=True,
+                    )
+            except Exception as e:
+                result["failed"] += 1
+                self.logInstallIssue(
+                    f"Could not set priority for {mod_name}: {e}",
+                    expected=True,
+                )
+
+        try:
+            repaired_priorities = [modlist.priority(name) for name in present_mods]
+        except Exception:
+            repaired_priorities = []
+        if repaired_priorities == sorted(repaired_priorities):
+            result["verified"] = len(present_mods)
+            self.log(
+                f"Collection priority order repaired for {len(present_mods)} mods",
+                "success",
+            )
+        else:
+            result["failed"] += len(present_mods)
+            self.logInstallIssue(
+                "Collection priority order still differs after repair",
+                expected=True,
+            )
+
+        result["failed"] += len(missing_mods)
+        return result
+
+    def activatePluginsForMods(self, organizer, mod_names):
+        plugin_list = organizer.pluginList()
+        mod_name_set = set(mod_names)
+        activated = 0
+        already_active = 0
+        blocked = 0
+
+        try:
+            organizer.refresh(True)
+        except Exception as e:
+            self.logInstallIssue(f"Could not refresh plugin list: {e}", expected=True)
+
+        self.log("Activating plugins from installed mods...")
+        for plugin_name in plugin_list.pluginNames():
+            try:
+                if plugin_list.origin(plugin_name) not in mod_name_set:
+                    continue
+
+                if plugin_list.state(plugin_name) == mobase.PluginState.ACTIVE:
+                    already_active += 1
+                    continue
+
+                plugin_list.setState(plugin_name, mobase.PluginState.ACTIVE)
+                if plugin_list.state(plugin_name) == mobase.PluginState.ACTIVE:
+                    activated += 1
+                else:
+                    blocked += 1
+                    masters = ", ".join(plugin_list.masters(plugin_name))
+                    detail = f"; masters: {masters}" if masters else ""
+                    self.log(
+                        f"  Plugin not activated by MO2: {plugin_name}{detail}",
+                        "warning",
+                    )
+            except Exception as e:
+                blocked += 1
+                self.logInstallIssue(
+                    f"Could not activate plugin {plugin_name}: {e}",
+                    expected=True,
+                )
+
+        self.log(
+            f"  Plugin activation: {activated} activated, "
+            f"{already_active} already active, {blocked} blocked"
+        )
+        return {
+            "activated": activated,
+            "already_active": already_active,
+            "blocked": blocked,
+        }
 
     def buildDownloadMap(self, downloads_path: Path):
         download_map = {}
