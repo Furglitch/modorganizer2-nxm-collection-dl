@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from PyQt6.QtCore import QObject, QSize, QThread, QTimer, Qt, QUrl, pyqtSignal, qDebug
+from PyQt6.QtCore import QObject, QSize, QThread, QTimer, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -22,6 +22,8 @@ from PyQt6.QtWidgets import (
 from .api import fetchRevisions, fetchInfo, fetchModInfo
 from . import __meta__
 from . import var
+
+qDebug = var.debug
 
 
 class ModInfoWorker(QObject):

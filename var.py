@@ -2,7 +2,7 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime
-from PyQt6.QtCore import qDebug, QUrl
+from PyQt6.QtCore import QUrl, qDebug as _qDebug
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
@@ -24,6 +24,15 @@ bundledMods = []
 chosenOptional = []
 chosenExternal = True
 openModWebsites = False
+
+
+def debug(message):
+    """Send text to MO2's debug log without crashing on non-ASCII Nexus data."""
+    safe_message = str(message).encode("ascii", "backslashreplace").decode("ascii")
+    _qDebug(safe_message)
+
+
+qDebug = debug
 
 
 def cleanJson(data, visible=False):

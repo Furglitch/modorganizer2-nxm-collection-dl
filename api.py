@@ -1,8 +1,9 @@
 import json
 import urllib.request
-from PyQt6.QtCore import qDebug
 
 from . import var
+
+qDebug = var.debug
 
 
 def nxmFetch(requestData):

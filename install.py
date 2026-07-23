@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, qDebug
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QApplication,
     QDialogButtonBox,
@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __meta__, var
+
+qDebug = var.debug
 
 MO2_WARNING_PATTERNS = (
     "Plugin not found:",
