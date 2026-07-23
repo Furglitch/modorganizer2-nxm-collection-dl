@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from PyQt6.QtCore import QObject, QSize, QThread, Qt, QUrl, pyqtSignal, qDebug
+from PyQt6.QtCore import QObject, QSize, QThread, QTimer, Qt, QUrl, pyqtSignal, qDebug
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -691,6 +691,7 @@ class stepDownload(QDialog):
         self.mod_urls_to_open = []
         self.current_batch = 0
         self.batch_btn = None
+        self.progress_dialog = None
 
         plugin_instance = getattr(__meta__, "_download_plugin", None)
         if plugin_instance is not None:
@@ -731,6 +732,9 @@ class stepDownload(QDialog):
                 )
                 mods_to_download = var.essentialMods + var.chosenOptional
                 qDebug(f"[NXMColDL] Queueing {len(mods_to_download)} downloads")
+                self.progress_dialog = stepDownloadProgress(
+                    self.parent(), len(mods_to_download)
+                )
                 for mod in mods_to_download:
                     mod_id = mod["file"]["mod"]["modId"]
                     file_id = mod["file"]["fileId"]
@@ -740,12 +744,7 @@ class stepDownload(QDialog):
                     )
                     plugin_instance.downloadMod(mod)
 
-                self.close()
-                progress_dialog = stepDownloadProgress(
-                    self.parent(), len(mods_to_download)
-                )
-                progress_dialog.exec()
-                return
+                self.label.setText(f"Queued {len(mods_to_download)} downloads in MO2.")
         else:
             qDebug(
                 "[NXMColDL] downloadMod called without active plugin instance; Aborting"
@@ -766,6 +765,15 @@ class stepDownload(QDialog):
         self.submit_btn.clicked.connect(self.submit)
         self.layout.addWidget(self.submit_btn)
         self.setLayout(self.layout)
+
+        if self.progress_dialog is not None:
+            QTimer.singleShot(0, self.show_progress_dialog)
+
+    def show_progress_dialog(self):
+        """Run the progress dialog after this step's modal event loop starts."""
+        self.hide()
+        self.progress_dialog.exec()
+        self.accept()
 
     def update_batch_button(self):
         plugin_instance = getattr(__meta__, "_download_plugin", None)
