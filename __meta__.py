@@ -159,13 +159,13 @@ class InstallCollectionTool(mobase.IPluginTool):
                 True,
             ),
             mobase.PluginSetting(
-                "auto_accept_fomod_defaults",
-                "Automatically accept default selections in MO2 installer dialogs",
+                "auto_merge_existing_mods",
+                "Automatically merge when MO2 reports that a mod already exists",
                 True,
             ),
             mobase.PluginSetting(
-                "auto_merge_existing_mods",
-                "Automatically merge when MO2 reports that a mod already exists",
+                "install_files_as_separate_mods",
+                "Install each collection file as a separate named MO2 mod",
                 True,
             ),
             mobase.PluginSetting(

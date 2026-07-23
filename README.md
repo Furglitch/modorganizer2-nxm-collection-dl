@@ -31,6 +31,16 @@ A Mod Organizer 2 plugin that lets you download Nexus Mods collections directly 
    - If you don't have Premium, make sure to check the 'Open in Browser' option to open the mod pages in your web browser for manual downloading.
 6. Install the downloaded mods in MO2 using the 'Install Downloaded Collection' tool.
 
+The installer processes one downloaded archive at a time and waits briefly before
+starting the next archive. This avoids overlapping MO2 installer sessions while
+still allowing normal MO2 installer dialogs to appear when a mod needs manual
+choices. Installed mods are not enabled by default; enable
+`activate_mods_after_install` in the plugin settings if you want the install pass
+to check them in MO2 after it finishes. Collection files are installed as
+separate MO2 mod rows by default; repeated files from the same Nexus mod use
+`#2`, `#3`, and later suffixes instead of silently merging into one row. FOMOD
+choice replay is not implemented.
+
 ## Contributing
 
 Contributions welcome! Feel free to open issues or submit pull requests.

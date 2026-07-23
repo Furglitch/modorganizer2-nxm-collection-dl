@@ -112,50 +112,9 @@ def acceptModExistsDialog():
             return
 
 
-def acceptDefaultInstallerDialog(remaining=80):
-    if remaining <= 0:
-        return
-
-    for widget in QApplication.topLevelWidgets():
-        if not widget.isVisible():
-            continue
-
-        title = widget.windowTitle()
-        if title in ("Error", "Quick Install") or title.startswith(
-            "NXM Collection Installer"
-        ):
-            continue
-
-        buttons = widget.findChildren(QPushButton)
-        button_by_text = {
-            button.text().replace("&", "").strip().lower(): button for button in buttons
-        }
-
-        # MO2 installer/FOMOD dialogs expose Next/Install buttons. Accept the
-        # already selected defaults, but do not click unrelated ordinary dialogs.
-        next_button = button_by_text.get("next")
-        install_button = button_by_text.get("install")
-        if next_button and next_button.isEnabled():
-            qDebug(f"[NXMColDL Install] Auto-accepting default installer page: {title}")
-            suppressDialogAndClick(widget, next_button)
-            QTimer.singleShot(300, lambda: acceptDefaultInstallerDialog(remaining - 1))
-            return
-
-        if install_button and install_button.isEnabled():
-            qDebug(
-                f"[NXMColDL Install] Auto-accepting default installer install: {title}"
-            )
-            suppressDialogAndClick(widget, install_button)
-            QTimer.singleShot(300, lambda: acceptDefaultInstallerDialog(remaining - 1))
-            return
-
-    QTimer.singleShot(300, lambda: acceptDefaultInstallerDialog(remaining - 1))
-
-
 def scheduleInstallDialogHandlers(
     auto_accept_quick_install=True,
     auto_dismiss_known_post_install_errors=True,
-    auto_accept_fomod_defaults=False,
     auto_merge_existing_mods=True,
 ):
     for delay in (250, 750, 1500, 3000, 5000):
@@ -165,8 +124,6 @@ def scheduleInstallDialogHandlers(
             QTimer.singleShot(delay, dismissKnownPostInstallErrorDialog)
         if auto_merge_existing_mods:
             QTimer.singleShot(delay, acceptModExistsDialog)
-    if auto_accept_fomod_defaults:
-        QTimer.singleShot(250, acceptDefaultInstallerDialog)
 
 
 class stepSelectCollection(QDialog):
@@ -398,17 +355,26 @@ class stepInstallMods(QDialog):
         self.log_text.setMinimumHeight(200)
         layout.addWidget(self.log_text)
 
+        button_row = QHBoxLayout()
+
+        self.cancel_btn = QPushButton("Cancel After Current")
+        self.cancel_btn.clicked.connect(self.cancelInstallation)
+        button_row.addWidget(self.cancel_btn)
+
         # Close button (initially disabled)
         self.close_btn = QPushButton("Close")
         self.close_btn.setEnabled(False)
         self.close_btn.clicked.connect(self.accept)
-        layout.addWidget(self.close_btn)
+        button_row.addWidget(self.close_btn)
+        layout.addLayout(button_row)
 
         self.setLayout(layout)
         self.install_warnings = []
+        self.install_context = None
+        self.cancel_requested = False
 
         # Start installation after dialog is shown
-        QTimer.singleShot(100, self.startInstallation)
+        QTimer.singleShot(500, self.startInstallation)
 
     def log(self, message, level="info"):
         color = "black"
@@ -434,6 +400,12 @@ class stepInstallMods(QDialog):
         return any(
             pattern in message for pattern in EXPECTED_INSTALL_EXCEPTION_PATTERNS
         )
+
+    def cancelInstallation(self):
+        self.cancel_requested = True
+        self.cancel_btn.setEnabled(False)
+        self.progress_label.setText("Cancelling after current install...")
+        self.log("Cancel requested; stopping after the current archive.", "warning")
 
     def interfaceLogPath(self, organizer):
         return Path(organizer.downloadsPath()).parent / "logs" / "mo_interface.log"
@@ -487,7 +459,7 @@ class stepInstallMods(QDialog):
         return report_path
 
     def startInstallation(self):
-        """Main installation process"""
+        """Prepare the install pass and queue the first archive."""
         qDebug(f"[NXMColDL] Starting installation: {var.name}")
         try:
             plugin_instance = getattr(__meta__, "_install_plugin", None)
@@ -525,158 +497,228 @@ class stepInstallMods(QDialog):
             self.log(f"Found {len(installed_map)} installed Nexus file records")
             self.log("")
 
-            # Install each mod in order
-            installed_mods = []
-            mods_to_activate = []
-            for idx, mod_info in enumerate(mods_to_install, 1):
-                self.progress_label.setText(
-                    f"Installing mod {idx}/{len(mods_to_install)}"
-                )
-                self.progress_bar.setValue(idx - 1)
-
-                mod_id = mod_info["file"]["mod"]["modId"]
-                file_id = mod_info["file"]["fileId"]
-                mod_name = mod_info["file"]["mod"]["name"]
-                file_name = mod_info["file"]["name"]
-
-                self.log(f"[{idx}/{len(mods_to_install)}] Processing: {mod_name}")
-                self.log(f"  File: {file_name} (ModID: {mod_id}, FileID: {file_id})")
-
-                install_key = (int(mod_id), int(file_id))
-                if install_key in installed_map:
-                    internal_name = installed_map[install_key]
-                    self.log(f"  Already installed as: {internal_name}", "success")
-                    self.log("")
-                    installed_mods.append(internal_name)
-                    activate_after_install = organizer.pluginSetting(
-                        plugin_instance.name(), "activate_mods_after_install"
-                    )
-                    if activate_after_install:
-                        mods_to_activate.append(internal_name)
-                    continue
-
-                # Find downloaded file
-                if install_key not in download_map:
-                    self.logInstallIssue("Not found in downloads - skipping")
-                    self.log("")
-                    continue
-
-                download_path = download_map[install_key]
-                self.log(f"  Found: {download_path.name}")
-
-                # Install the mod
-                log_path, log_offset = self.captureInterfaceLogPosition(organizer)
-                try:
-                    auto_accept_quick_install = organizer.pluginSetting(
-                        plugin_instance.name(), "auto_accept_quick_install"
-                    )
-                    auto_dismiss_known_post_install_errors = organizer.pluginSetting(
-                        plugin_instance.name(),
-                        "auto_dismiss_known_post_install_errors",
-                    )
-                    auto_accept_fomod_defaults = organizer.pluginSetting(
-                        plugin_instance.name(), "auto_accept_fomod_defaults"
-                    )
-                    auto_merge_existing_mods = organizer.pluginSetting(
-                        plugin_instance.name(), "auto_merge_existing_mods"
-                    )
-                    activate_after_install = organizer.pluginSetting(
-                        plugin_instance.name(), "activate_mods_after_install"
-                    )
-                    scheduleInstallDialogHandlers(
-                        auto_accept_quick_install,
-                        auto_dismiss_known_post_install_errors,
-                        auto_accept_fomod_defaults,
-                        auto_merge_existing_mods,
-                    )
-
-                    installed_mod = organizer.installMod(str(download_path))
-                    warning_count = self.collectInterfaceLogWarnings(
-                        log_path, log_offset, mod_name, file_name
-                    )
-                    if warning_count:
-                        self.log(
-                            f"  Captured {warning_count} MO2 warning(s) for report",
-                            "warning",
-                        )
-                    if installed_mod:
-                        internal_name = installed_mod.name()
-                        self.log(f"  Installed as: {internal_name}", "success")
-
-                        self.log(
-                            "  Priority unchanged; MO2 appended the mod to the list",
-                            "warning",
-                        )
-
-                        installed_mods.append(internal_name)
-                        if activate_after_install:
-                            mods_to_activate.append(internal_name)
-                    else:
-                        self.logInstallIssue(
-                            "Installation failed or was cancelled", expected=True
-                        )
-                except Exception as e:
-                    warning_count = self.collectInterfaceLogWarnings(
-                        log_path, log_offset, mod_name, file_name
-                    )
-                    if warning_count:
-                        self.log(
-                            f"  Captured {warning_count} MO2 warning(s) for report",
-                            "warning",
-                        )
-                    self.logInstallIssue(
-                        f"Installation issue: {e}",
-                        expected=self.isExpectedInstallException(e),
-                    )
-
-                self.log("")
-
-            if mods_to_activate:
-                self.progress_label.setText("Activating installed mods...")
-                self.log(f"Activating {len(mods_to_activate)} installed mods...")
-                log_path, log_offset = self.captureInterfaceLogPosition(organizer)
-                for internal_name in mods_to_activate:
-                    try:
-                        modlist.setActive(internal_name, True)
-                    except Exception as e:
-                        self.logInstallIssue(f"Could not activate {internal_name}: {e}")
-                warning_count = self.collectInterfaceLogWarnings(
-                    log_path, log_offset, "post-install activation", ""
-                )
-                if warning_count:
-                    self.log(
-                        f"  Captured {warning_count} MO2 warning(s) during activation",
-                        "warning",
-                    )
-                self.log("")
-
-            # Final summary
-            self.progress_bar.setValue(len(mods_to_install))
-            self.progress_label.setText("Installation complete!")
-            self.log("=" * 50)
-            self.log("Installation Summary:", "success")
-            self.log(f"  Total mods: {len(mods_to_install)}")
-            self.log(f"  Successfully installed: {len(installed_mods)}")
-            self.log(f"  Failed/Skipped: {len(mods_to_install) - len(installed_mods)}")
-            self.log(f"  MO2 warnings captured: {len(self.install_warnings)}")
-            report_path = self.writeWarningReport(organizer)
-            if report_path:
-                self.log(f"  Warning report: {report_path}", "warning")
-            qDebug(
-                f"[NXMColDL] Installation complete: {len(installed_mods)}/{len(mods_to_install)} succeeded"
-            )
-
-            if len(installed_mods) < len(mods_to_install):
-                self.log("", "warning")
-                self.log(
-                    "Some mods were not installed. Make sure all mods are downloaded first.",
-                    "warning",
-                )
+            self.install_context = {
+                "plugin_instance": plugin_instance,
+                "organizer": organizer,
+                "modlist": modlist,
+                "mods_to_install": mods_to_install,
+                "download_map": download_map,
+                "installed_map": installed_map,
+                "installed_mods": [],
+                "mods_to_activate": [],
+                "used_mod_names": set(modlist.allMods()),
+                "mod_name_counts": {},
+                "activation_enabled": organizer.pluginSetting(
+                    plugin_instance.name(), "activate_mods_after_install"
+                ),
+                "separate_file_installs": organizer.pluginSetting(
+                    plugin_instance.name(), "install_files_as_separate_mods"
+                ),
+                "next_index": 0,
+            }
+            QTimer.singleShot(1500, self.installNextMod)
 
         except Exception as e:
             self.log(f"Fatal error during installation: {e}", "error")
-        finally:
             self.close_btn.setEnabled(True)
+
+    def installNextMod(self):
+        if not self.install_context:
+            return
+
+        context = self.install_context
+        plugin_instance = context["plugin_instance"]
+        organizer = context["organizer"]
+        mods_to_install = context["mods_to_install"]
+        download_map = context["download_map"]
+        installed_map = context["installed_map"]
+        installed_mods = context["installed_mods"]
+        mods_to_activate = context["mods_to_activate"]
+        used_mod_names = context["used_mod_names"]
+        mod_name_counts = context["mod_name_counts"]
+
+        idx = context["next_index"] + 1
+        if self.cancel_requested:
+            self.finishInstallation(cancelled=True)
+            return
+
+        if idx > len(mods_to_install):
+            self.finishInstallation()
+            return
+
+        context["next_index"] = idx
+        self.progress_label.setText(f"Installing mod {idx}/{len(mods_to_install)}")
+        self.progress_bar.setValue(idx - 1)
+
+        mod_info = mods_to_install[idx - 1]
+        mod_id = mod_info["file"]["mod"]["modId"]
+        file_id = mod_info["file"]["fileId"]
+        mod_name = mod_info["file"]["mod"]["name"]
+        file_name = mod_info["file"]["name"]
+        install_key = (int(mod_id), int(file_id))
+
+        self.log(f"[{idx}/{len(mods_to_install)}] Processing: {mod_name}")
+        self.log(f"  File: {file_name} (ModID: {mod_id}, FileID: {file_id})")
+
+        activate_after_install = context["activation_enabled"]
+
+        if install_key in installed_map:
+            internal_name = installed_map[install_key]
+            self.log(f"  Already installed as: {internal_name}", "success")
+            self.log("")
+            installed_mods.append(internal_name)
+            if activate_after_install:
+                mods_to_activate.append(internal_name)
+            QTimer.singleShot(100, self.installNextMod)
+            return
+
+        if install_key not in download_map:
+            self.logInstallIssue("Not found in downloads - skipping")
+            self.log("")
+            QTimer.singleShot(100, self.installNextMod)
+            return
+
+        download_path = download_map[install_key]
+        self.log(f"  Found: {download_path.name}")
+
+        log_path, log_offset = self.captureInterfaceLogPosition(organizer)
+        try:
+            scheduleInstallDialogHandlers(
+                organizer.pluginSetting(
+                    plugin_instance.name(), "auto_accept_quick_install"
+                ),
+                organizer.pluginSetting(
+                    plugin_instance.name(),
+                    "auto_dismiss_known_post_install_errors",
+                ),
+                organizer.pluginSetting(
+                    plugin_instance.name(), "auto_merge_existing_mods"
+                ),
+            )
+
+            if context["separate_file_installs"]:
+                target_mod_name = self.allocateCollectionModName(
+                    mod_name, used_mod_names, mod_name_counts
+                )
+                self.log(f"  Target MO2 name: {target_mod_name}")
+                installed_mod = organizer.installMod(
+                    str(download_path), target_mod_name
+                )
+            else:
+                installed_mod = organizer.installMod(str(download_path))
+            warning_count = self.collectInterfaceLogWarnings(
+                log_path, log_offset, mod_name, file_name
+            )
+            if warning_count:
+                self.log(
+                    f"  Captured {warning_count} MO2 warning(s) for report",
+                    "warning",
+                )
+            if installed_mod:
+                internal_name = installed_mod.name()
+                self.log(f"  Installed as: {internal_name}", "success")
+                self.log(
+                    "  Priority unchanged; MO2 appended the mod to the list",
+                    "warning",
+                )
+                used_mod_names.add(internal_name)
+                installed_mods.append(internal_name)
+                installed_map[install_key] = internal_name
+                if activate_after_install:
+                    mods_to_activate.append(internal_name)
+            else:
+                self.logInstallIssue(
+                    "Installation failed or was cancelled", expected=True
+                )
+        except Exception as e:
+            warning_count = self.collectInterfaceLogWarnings(
+                log_path, log_offset, mod_name, file_name
+            )
+            if warning_count:
+                self.log(
+                    f"  Captured {warning_count} MO2 warning(s) for report",
+                    "warning",
+                )
+            self.logInstallIssue(
+                f"Installation issue: {e}",
+                expected=self.isExpectedInstallException(e),
+            )
+
+        self.log("")
+        QTimer.singleShot(1500, self.installNextMod)
+
+    def finishInstallation(self, cancelled=False):
+        if not self.install_context:
+            return
+
+        context = self.install_context
+        organizer = context["organizer"]
+        modlist = context["modlist"]
+        mods_to_install = context["mods_to_install"]
+        installed_mods = context["installed_mods"]
+        mods_to_activate = context["mods_to_activate"]
+        activation_enabled = context["activation_enabled"]
+        activated_count = 0
+
+        if mods_to_activate:
+            self.progress_label.setText("Activating installed mods...")
+            mods_to_activate = list(dict.fromkeys(mods_to_activate))
+            self.log(f"Activating {len(mods_to_activate)} installed mods...")
+            log_path, log_offset = self.captureInterfaceLogPosition(organizer)
+            for internal_name in mods_to_activate:
+                try:
+                    modlist.setActive(internal_name, True)
+                    activated_count += 1
+                except Exception as e:
+                    self.logInstallIssue(f"Could not activate {internal_name}: {e}")
+            warning_count = self.collectInterfaceLogWarnings(
+                log_path, log_offset, "post-install activation", ""
+            )
+            if warning_count:
+                self.log(
+                    f"  Captured {warning_count} MO2 warning(s) during activation",
+                    "warning",
+                )
+            self.log("")
+
+        self.progress_bar.setValue(len(mods_to_install))
+        if cancelled:
+            self.progress_label.setText("Installation cancelled.")
+        else:
+            self.progress_label.setText("Installation complete!")
+        self.log("=" * 50)
+        if cancelled:
+            self.log("Installation Summary (cancelled):", "warning")
+        else:
+            self.log("Installation Summary:", "success")
+        installed_containers = len(set(installed_mods))
+        self.log(f"  Collection file entries: {len(mods_to_install)}")
+        self.log(f"  Entries installed/already present: {len(installed_mods)}")
+        self.log(f"  MO2 mod containers touched: {installed_containers}")
+        if activation_enabled:
+            self.log(f"  Activated installed mods: {activated_count}")
+        else:
+            self.log("  Activated installed mods: 0 (activation disabled)")
+        self.log(
+            f"  Failed/skipped collection entries: {len(mods_to_install) - len(installed_mods)}"
+        )
+        self.log(f"  MO2 warnings captured: {len(self.install_warnings)}")
+        report_path = self.writeWarningReport(organizer)
+        if report_path:
+            self.log(f"  Warning report: {report_path}", "warning")
+        qDebug(
+            f"[NXMColDL] Installation complete: {len(installed_mods)}/{len(mods_to_install)} succeeded"
+        )
+
+        if len(installed_mods) < len(mods_to_install):
+            self.log("", "warning")
+            self.log(
+                "Some mods were not installed. Make sure all mods are downloaded first.",
+                "warning",
+            )
+
+        self.close_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
 
     def buildDownloadMap(self, downloads_path: Path):
         download_map = {}
@@ -734,6 +776,29 @@ class stepInstallMods(QDialog):
                 qDebug(f"[NXMColDL] Unexpected error parsing {meta_file.name}: {e}")
 
         return download_map
+
+    def allocateCollectionModName(self, mod_name, used_mod_names, mod_name_counts):
+        base_name = self.sanitizeModName(mod_name)
+        next_index = mod_name_counts.get(base_name, 1)
+
+        if next_index == 1 and base_name not in used_mod_names:
+            mod_name_counts[base_name] = 2
+            used_mod_names.add(base_name)
+            return base_name
+
+        next_index = max(next_index, 2)
+        while True:
+            candidate = f"{base_name} #{next_index}"
+            if candidate not in used_mod_names:
+                mod_name_counts[base_name] = next_index + 1
+                used_mod_names.add(candidate)
+                return candidate
+            next_index += 1
+
+    def sanitizeModName(self, mod_name):
+        clean_name = str(mod_name).replace("/", "-").replace("\\", "-")
+        clean_name = " ".join(clean_name.split())
+        return clean_name or "Collection Mod"
 
     def buildInstalledMap(self, mods_path: Path):
         installed_map = {}
