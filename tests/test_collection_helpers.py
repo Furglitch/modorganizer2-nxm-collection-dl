@@ -9,6 +9,7 @@ from collection_helpers import (
     parseCollectionAddress,
     staleZeroByteUnfinishedEntries,
     unfinishedDownloadEntries,
+    zeroByteUnfinishedEntries,
 )
 
 
@@ -117,6 +118,18 @@ class UnfinishedDownloadEntriesTests(unittest.TestCase):
 
         self.assertEqual(staleZeroByteUnfinishedEntries(entries, 200, 60), entries)
 
+    def test_identifies_zero_byte_unfinished_entries_for_prequeue_cleanup(self):
+        entries = [
+            {
+                "archive": Path("Queued.7z.unfinished"),
+                "metadata": Path("Queued.7z.unfinished.meta"),
+                "archive_size": 0,
+                "mtime": 200,
+            }
+        ]
+
+        self.assertEqual(zeroByteUnfinishedEntries(entries), entries)
+
     def test_preserves_fresh_or_non_empty_unfinished_entries(self):
         fresh_entry = {
             "archive": Path("Fresh.7z.unfinished"),
@@ -133,6 +146,7 @@ class UnfinishedDownloadEntriesTests(unittest.TestCase):
 
         self.assertEqual(staleZeroByteUnfinishedEntries([fresh_entry], 200, 60), [])
         self.assertEqual(staleZeroByteUnfinishedEntries([partial_entry], 200, 60), [])
+        self.assertEqual(zeroByteUnfinishedEntries([partial_entry]), [])
 
 
 class InstallerDefaultActionLabelTests(unittest.TestCase):

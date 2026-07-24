@@ -27,6 +27,7 @@ from .collection_helpers import (
     parseCollectionAddress,
     staleZeroByteUnfinishedEntries,
     unfinishedDownloadEntries,
+    zeroByteUnfinishedEntries,
 )
 
 qDebug = var.debug
@@ -751,18 +752,13 @@ class stepDownloadProgress(QDialog):
             self.finish_if_complete()
 
     def cleanup_stale_unfinished_before_queue(self, key):
-        """Remove stale zero-byte leftovers before MO2 sees a duplicate file."""
-        if not self.stale_unfinished_seconds:
-            return
-
+        """Remove empty leftovers before MO2 sees a duplicate file."""
         entries = unfinishedDownloadEntries(downloadDirectory()).get(key)
-        stale_entries = staleZeroByteUnfinishedEntries(
-            entries, time.time(), self.stale_unfinished_seconds
-        )
-        if not stale_entries:
+        cleanup_entries = zeroByteUnfinishedEntries(entries)
+        if not cleanup_entries:
             return
 
-        for entry in stale_entries:
+        for entry in cleanup_entries:
             for path_key in ("archive", "metadata"):
                 try:
                     entry[path_key].unlink(missing_ok=True)
@@ -774,7 +770,7 @@ class stepDownloadProgress(QDialog):
 
         self.prequeue_cleanup_count += 1
         qDebug(
-            "[NXMColDL Progress] Removed stale zero-byte unfinished download "
+            "[NXMColDL Progress] Removed zero-byte unfinished download "
             f"before queueing ModID {key[0]}, FileID {key[1]}"
         )
 

@@ -164,6 +164,21 @@ def unfinishedDownloadEntries(downloads_dir):
     return entries
 
 
+def zeroByteUnfinishedEntries(entries):
+    """Return entries safe to remove before starting a fresh download.
+
+    A zero-byte ``.unfinished`` archive means MO2 created the placeholder but no
+    archive data has been written. If all matching leftovers are still empty,
+    removing them lets MO2 queue the same Nexus file without a duplicate-name
+    prompt. Any non-empty partial keeps the whole set intact so MO2 can resume it.
+    """
+    if not entries:
+        return []
+    if any(entry["archive_size"] > 0 for entry in entries):
+        return []
+    return list(entries)
+
+
 def staleZeroByteUnfinishedEntries(entries, now, stale_seconds):
     """Return unfinished entries safe to discard before a retry.
 
@@ -174,11 +189,9 @@ def staleZeroByteUnfinishedEntries(entries, now, stale_seconds):
     """
     if stale_seconds <= 0 or not entries:
         return []
-    if any(entry["archive_size"] > 0 for entry in entries):
-        return []
 
     newest_mtime = max(entry["mtime"] for entry in entries)
     if now - newest_mtime < stale_seconds:
         return []
 
-    return list(entries)
+    return zeroByteUnfinishedEntries(entries)
