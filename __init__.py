@@ -1,7 +1,7 @@
 import mobase
 
-from .__meta__ import DownloadCollectionTool, InstallCollectionTool
+from .__meta__ import CollectionModPage, DownloadCollectionTool, InstallCollectionTool
 
 
 def createPlugins() -> list[mobase.IPlugin]:
-    return [DownloadCollectionTool(), InstallCollectionTool()]
+    return [DownloadCollectionTool(), InstallCollectionTool(), CollectionModPage()]

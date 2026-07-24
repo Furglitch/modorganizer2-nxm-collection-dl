@@ -35,6 +35,29 @@ EXPECTED_INSTALL_EXCEPTION_PATTERNS = (
 )
 
 
+def loadMetadataIntoVar(metadata):
+    """Load saved collection metadata into the module state used by installers."""
+    var.uri = metadata.get("uri")
+    var.game = metadata.get("game")
+    var.collection = metadata.get("collection")
+    var.revision = metadata.get("revision")
+    var.author = metadata.get("author", "Unknown Author")
+    var.name = metadata.get("name", "Unknown Collection")
+    var.summary = metadata.get("summary", "No description available.")
+    var.thumbnail = metadata.get("thumbnail")
+    var.essentialMods = metadata.get("essentialMods", [])
+    var.chosenOptional = metadata.get("chosenOptional", [])
+    var.externalMods = metadata.get("externalMods", [])
+
+
+def installCollectionMetadata(metadata, parent=None):
+    loadMetadataIntoVar(metadata)
+    qDebug(f"[NXMColDL] Loaded collection: {var.name}")
+    qDebug(f"[NXMColDL] Essential mods: {len(var.essentialMods)}")
+    qDebug(f"[NXMColDL] Optional mods: {len(var.chosenOptional)}")
+    stepInstallMods(parent).exec()
+
+
 def clickButtonByText(widget, texts):
     wanted = {text.lower() for text in texts}
     for button in widget.findChildren(QPushButton):
@@ -302,27 +325,8 @@ class stepSelectCollection(QDialog):
             QMessageBox.critical(self, "Error", "No collection selected")
             return
 
-        # Store metadata in var for use in subsequent steps
-        var.uri = self.current_metadata.get("uri")
-        var.game = self.current_metadata.get("game")
-        var.collection = self.current_metadata.get("collection")
-        var.revision = self.current_metadata.get("revision")
-        var.author = self.current_metadata.get("author", "Unknown Author")
-        var.name = self.current_metadata.get("name", "Unknown Collection")
-        var.summary = self.current_metadata.get("summary", "No description available.")
-        var.thumbnail = self.current_metadata.get("thumbnail")
-        var.essentialMods = self.current_metadata.get("essentialMods", [])
-        var.chosenOptional = self.current_metadata.get("chosenOptional", [])
-        var.externalMods = self.current_metadata.get("externalMods", [])
-
-        qDebug(f"[NXMColDL] Loaded collection: {var.name}")
-        qDebug(f"[NXMColDL] Essential mods: {len(var.essentialMods)}")
-        qDebug(f"[NXMColDL] Optional mods: {len(var.chosenOptional)}")
-
         self.close()
-
-        # Proceed to installation step
-        stepInstallMods(self.parent()).exec()
+        installCollectionMetadata(self.current_metadata, self.parent())
 
 
 class stepInstallMods(QDialog):

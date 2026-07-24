@@ -1,4 +1,4 @@
-import re
+import time
 from pathlib import Path
 from PyQt6.QtCore import QObject, QSize, QThread, QTimer, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
@@ -22,8 +22,109 @@ from PyQt6.QtWidgets import (
 from .api import fetchRevisions, fetchInfo, fetchModInfo
 from . import __meta__
 from . import var
+from .collection_helpers import (
+    downloadedFileKeys,
+    parseCollectionAddress,
+    unfinishedDownloadEntries,
+)
 
 qDebug = var.debug
+
+
+def downloadDirectory():
+    plugin_instance = getattr(__meta__, "_download_plugin", None)
+    organizer = getattr(plugin_instance, "_organizer", None)
+    if not organizer:
+        return None
+    return Path(organizer.basePath()) / "downloads"
+
+
+def selectLatestRevision():
+    revisions = fetchRevisions(var.uri)
+    revision_list = (
+        revisions.get("collection", {}).get("revisions", []) if revisions else []
+    )
+    revision_numbers = [
+        revision.get("revisionNumber")
+        for revision in revision_list
+        if revision.get("revisionNumber") is not None
+    ]
+    return max(revision_numbers) if revision_numbers else None
+
+
+def applyCollectionAddress(address):
+    parsed = parseCollectionAddress(address)
+    if not parsed:
+        return None
+    var.uri = parsed["uri"]
+    var.game = parsed["game"]
+    var.collection = parsed["collection"]
+    var.revision = parsed["revision"]
+    qDebug(
+        "[NXMColDL] Collection address parsed: "
+        f"{var.game}/{var.collection} rev {var.revision or 'latest'}"
+    )
+    return parsed
+
+
+def populateCollectionInfo():
+    collection_data = fetchInfo(var.uri)
+    qDebug(f"[NXMColDL] Collection Info: {var.cleanJson(collection_data)}")
+    if not collection_data:
+        return False
+
+    collection = collection_data["collection"]
+    var.author = collection["user"]["name"]
+    var.name = collection["name"]
+    var.summary = var.cleanJson(collection["summary"], True)
+    var.thumbnail = collection.get("tileImage", {}).get("thumbnailUrl")
+    qDebug(f"[NXMColDL] Collection Name: {var.name}")
+    qDebug(f"[NXMColDL] Collection Author: {var.author}")
+    qDebug(f"[NXMColDL] Collection Summary: {var.summary}")
+    qDebug(f"[NXMColDL] Collection Thumbnail: {var.thumbnail}")
+    return True
+
+
+def populateCollectionMods(mods):
+    var.essentialMods.clear()
+    var.optionalMods.clear()
+    var.chosenOptional.clear()
+    var.externalMods.clear()
+    var.bundledMods.clear()
+
+    for mod in mods.get("collectionRevision", {}).get("modFiles", []):
+        mod_info = mod.get("file", {}).get("mod", {})
+        mod_domain = mod_info.get("game", {}).get("domainName")
+        if mod_domain and mod_domain != var.game:
+            mod_id = mod_info.get("modId")
+            var.externalMods.append(
+                {
+                    "id": mod_id,
+                    "name": mod_info.get("name", "External Nexus resource"),
+                    "resourceType": f"Nexus {mod_domain}",
+                    "resourceUrl": f"https://www.nexusmods.com/{mod_domain}/mods/{mod_id}",
+                }
+            )
+            qDebug(
+                "[NXMColDL] Cross-domain mod added as external resource: "
+                f"{mod_info.get('name')} ({mod_domain})"
+            )
+            continue
+
+        if not mod.get("optional"):
+            var.essentialMods.append(mod)
+            qDebug(f"[NXMColDL] Essential mod added: {mod['file']['mod']['name']}")
+        else:
+            var.optionalMods.append(mod)
+            qDebug(f"[NXMColDL] Optional mod added: {mod['file']['mod']['name']}")
+
+    for mod in mods.get("collectionRevision", {}).get("externalResources", []):
+        if mod.get("resourceUrl"):
+            var.externalMods.append(mod)
+            qDebug(f"[NXMColDL] External resource added: {mod.get('name')}")
+        else:
+            var.bundledMods.append(mod)
+            qDebug(f"[NXMColDL] Bundled resource added: {mod.get('name')}")
 
 
 class ModInfoWorker(QObject):
@@ -72,17 +173,11 @@ class stepURL(QDialog):
 
     def get_url(self):
         input_url = self.url_input.text().strip()
-        input_url = input_url.replace("http://", "https://")
-        for suffix in ["/mods", "/comments", "/changelog", "/bugs"]:
-            if input_url.endswith(suffix):
-                input_url = input_url[: -len(suffix)]
         qDebug(f"[NXMColDL] URL entered: {input_url}")
-        var.uri = input_url
-        return self.check_valid(input_url)
+        return applyCollectionAddress(input_url)
 
     def check_valid(self, url):
-        regex = r"^https:\/\/www\.nexusmods\.com\/games\/([a-zA-Z0-9_\-]+)\/collections\/([a-zA-Z0-9_\-]+)\/?$"
-        valid = re.match(regex, url)
+        valid = parseCollectionAddress(url)
         if valid:
             qDebug("[NXMColDL] URL is valid")
         return valid
@@ -97,12 +192,11 @@ class stepURL(QDialog):
                 "The URL you entered is not a valid Nexus Collection URL.",
             )
             return
-        var.game = matched.group(1)
-        qDebug(f"[NXMColDL] Game: {var.game}")
-        var.collection = matched.group(2)
-        qDebug(f"[NXMColDL] Collection ID: {var.collection}")
         self.close()
-        stepVersion(self.parent()).exec()
+        if var.revision:
+            stepModCount(self.parent()).exec()
+        else:
+            stepVersion(self.parent()).exec()
 
 
 class stepVersion(QDialog):
@@ -116,20 +210,7 @@ class stepVersion(QDialog):
         layout = QVBoxLayout()
 
         qDebug("[NXMColDL] Fetching collection info...")
-        collectionData = fetchInfo(var.uri)
-
-        qDebug(f"[NXMColDL] Collection Info: {var.cleanJson(collectionData)}")
-        if collectionData:
-            var.author = collectionData["collection"]["user"]["name"]
-            var.name = collectionData["collection"]["name"]
-            var.summary = var.cleanJson(collectionData["collection"]["summary"], True)
-            var.thumbnail = (
-                collectionData["collection"].get("tileImage", {}).get("thumbnailUrl")
-            )
-            qDebug(f"[NXMColDL] Collection Name: {var.name}")
-            qDebug(f"[NXMColDL] Collection Author: {var.author}")
-            qDebug(f"[NXMColDL] Collection Summary: {var.summary}")
-            qDebug(f"[NXMColDL] Collection Thumbnail: {var.thumbnail}")
+        populateCollectionInfo()
 
         infoBox = QHBoxLayout()
 
@@ -246,12 +327,6 @@ class stepModCount(QDialog):
         self.getMods()
 
     def getMods(self):
-        var.essentialMods.clear()
-        var.optionalMods.clear()
-        var.chosenOptional.clear()
-        var.externalMods.clear()
-        var.bundledMods.clear()
-
         # background process for loading modlist
         self._thread = QThread(self)
         self._worker = ModInfoWorker(var.uri)
@@ -276,38 +351,7 @@ class stepModCount(QDialog):
     def _on_mods_fetched(self, mods):
         qDebug("[NXMColDL] stepModCount: Processing fetched mod data")
         qDebug(f"[NXMColDL] Mods Info: {var.cleanJson(mods)}")
-        for mod in mods.get("collectionRevision", {}).get("modFiles", []):
-            mod_info = mod.get("file", {}).get("mod", {})
-            mod_domain = mod_info.get("game", {}).get("domainName")
-            if mod_domain and mod_domain != var.game:
-                mod_id = mod_info.get("modId")
-                var.externalMods.append(
-                    {
-                        "id": mod_id,
-                        "name": mod_info.get("name", "External Nexus resource"),
-                        "resourceType": f"Nexus {mod_domain}",
-                        "resourceUrl": f"https://www.nexusmods.com/{mod_domain}/mods/{mod_id}",
-                    }
-                )
-                qDebug(
-                    "[NXMColDL] Cross-domain mod added as external resource: "
-                    f"{mod_info.get('name')} ({mod_domain})"
-                )
-                continue
-
-            if not mod.get("optional"):
-                var.essentialMods.append(mod)
-                qDebug(f"[NXMColDL] Essential mod added: {mod['file']['mod']['name']}")
-            else:
-                var.optionalMods.append(mod)
-                qDebug(f"[NXMColDL] Optional mod added: {mod['file']['mod']['name']}")
-        for mod in mods.get("collectionRevision", {}).get("externalResources", []):
-            if mod.get("resourceUrl"):
-                var.externalMods.append(mod)
-                qDebug(f"[NXMColDL] External resource added: {mod.get('name')}")
-            else:
-                var.bundledMods.append(mod)
-                qDebug(f"[NXMColDL] Bundled resource added: {mod.get('name')}")
+        populateCollectionMods(mods)
 
         essentialCount = len(var.essentialMods)
         optionalCount = len(var.optionalMods)
@@ -585,15 +629,46 @@ class stepSummary(QDialog):
 class stepDownloadProgress(QDialog):
     """Progress dialog that tracks download completion"""
 
-    def __init__(self, parent=None, total_mods=0):
+    def __init__(
+        self,
+        parent=None,
+        mods_to_download=None,
+        on_complete=None,
+        max_retries=2,
+        retry_delay_ms=2500,
+        stale_unfinished_seconds=60,
+        close_on_success=False,
+        success_close_delay_ms=0,
+    ):
         super().__init__(parent)
         self.setWindowTitle("NXM Collection Downloader - Download Progress")
         self.setMinimumWidth(350)
 
-        self.total_mods = total_mods
+        self.mods_to_download = mods_to_download or []
+        self.total_mods = len(self.mods_to_download)
+        self.on_complete = on_complete
+        self.max_retries = max(0, int(max_retries or 0))
+        self.retry_delay_ms = retry_delay_ms
+        self.stale_unfinished_seconds = max(0, int(stale_unfinished_seconds or 0))
+        self.close_on_success = close_on_success
+        self.success_close_delay_ms = max(0, int(success_close_delay_ms or 0))
         self.completed_count = 0
         self.failed_count = 0
+        self.retry_count = 0
         self.is_tracking = True
+        self.download_ids = {}
+        self.completed_keys = set()
+        self.failed_keys = set()
+        self.retry_attempts = {}
+        self.key_counts = {}
+        self.queued_keys = set()
+        self.reconcile_timer = QTimer(self)
+        self.reconcile_timer.setInterval(1000)
+        self.reconcile_timer.timeout.connect(self.reconcile_completed_downloads)
+        for mod in self.mods_to_download:
+            key = self.mod_key(mod)
+            self.key_counts[key] = self.key_counts.get(key, 0) + 1
+        self.already_downloaded_keys = downloadedFileKeys(downloadDirectory())
 
         layout = QVBoxLayout()
 
@@ -624,40 +699,270 @@ class stepDownloadProgress(QDialog):
             self.download_manager = plugin_instance._organizer.downloadManager()
             self.download_manager.onDownloadComplete(self.on_download_complete)
             self.download_manager.onDownloadFailed(self.on_download_failed)
+            self.download_manager.onDownloadPaused(self.on_download_paused)
             self.download_manager.onDownloadRemoved(self.on_download_removed)
+        else:
+            self.download_manager = None
+
+        QTimer.singleShot(0, self.queue_downloads)
+        self.reconcile_timer.start()
+
+    def mod_key(self, mod):
+        return (int(mod["file"]["mod"]["modId"]), int(mod["file"]["fileId"]))
+
+    def mod_label(self, mod):
+        return mod["file"]["mod"].get("name") or mod["file"].get("name") or "mod"
+
+    def queue_downloads(self):
+        plugin_instance = getattr(__meta__, "_download_plugin", None)
+        if not plugin_instance or not getattr(plugin_instance, "_organizer", None):
+            self.detail_label.setText(
+                "Failed to access Mod Organizer download manager."
+            )
+            self.detail_label.setStyleSheet("color: red;")
+            self.is_tracking = False
+            return
+
+        skipped = 0
+        for mod in self.mods_to_download:
+            key = self.mod_key(mod)
+            if key in self.completed_keys or key in self.queued_keys:
+                continue
+            if key in self.already_downloaded_keys:
+                self.completed_keys.add(key)
+                skipped += self.key_counts.get(key, 1)
+                continue
+            self.queued_keys.add(key)
+            self.queue_mod(mod)
+
+        if skipped:
+            self.completed_count = skipped
+            qDebug(
+                f"[NXMColDL Progress] Skipped {skipped} already-downloaded archive(s)"
+            )
+            self.update_progress()
+
+        if self.total_mods == 0:
+            self.finish_if_complete()
+        elif self.completed_count >= self.total_mods:
+            self.finish_if_complete()
+
+    def queue_mod(self, mod):
+        plugin_instance = getattr(__meta__, "_download_plugin", None)
+        key = self.mod_key(mod)
+        mod_id, file_id = key
+        mod_name = self.mod_label(mod)
+        qDebug(
+            "[NXMColDL] Queueing download - "
+            f"ModID: {mod_id}, FileID: {file_id}, Name: {mod_name}"
+        )
+        download_id = plugin_instance.downloadMod(mod)
+        self.download_ids[int(download_id)] = key
+        qDebug(
+            "[NXMColDL Progress] Tracking download "
+            f"ID {download_id} for ModID {mod_id}, FileID {file_id}"
+        )
+
+    def mod_by_key(self, key):
+        for mod in self.mods_to_download:
+            if self.mod_key(mod) == key:
+                return mod
+        return None
 
     def on_download_complete(self, download_id):
         """Called when a download completes successfully"""
         if not self.is_tracking:
             return
 
-        qDebug(f"[NXMColDL Progress] Download completed: ID {download_id}")
-        self.completed_count += 1
-        self.update_progress()
+        key = self.download_ids.pop(int(download_id), None)
+        if key is None or key in self.completed_keys:
+            return
 
-        if self.completed_count >= self.total_mods:
-            qDebug("[NXMColDL Progress] All downloads completed")
-            self.is_tracking = False
+        qDebug(f"[NXMColDL Progress] Download completed: ID {download_id}")
+        self.completed_keys.add(key)
+        self.completed_count += self.key_counts.get(key, 1)
+        self.update_progress()
+        self.finish_if_complete()
 
     def on_download_failed(self, download_id):
         """Called when a download fails"""
         if not self.is_tracking:
             return
 
-        qDebug(f"[NXMColDL Progress] Download failed: ID {download_id}")
-        self.failed_count += 1
-        self.completed_count += 1
-        self.update_progress()
+        key = self.download_ids.pop(int(download_id), None)
+        if key is None or key in self.completed_keys or key in self.failed_keys:
+            return
 
-        if self.completed_count >= self.total_mods:
-            qDebug(
-                f"[NXMColDL Progress] Download tracking complete. {self.failed_count} failed."
+        qDebug(f"[NXMColDL Progress] Download failed: ID {download_id}")
+        attempts = self.retry_attempts.get(key, 0)
+        if attempts < self.max_retries:
+            self.retry_attempts[key] = attempts + 1
+            self.retry_count += 1
+            self.queued_keys.discard(key)
+            mod = self.mod_by_key(key)
+            mod_name = self.mod_label(mod) if mod else f"ModID {key[0]}"
+            self.detail_label.setText(
+                f"Retrying {mod_name} ({attempts + 1}/{self.max_retries})..."
             )
-            self.is_tracking = False
+            self.detail_label.setStyleSheet("color: orange;")
+            qDebug(
+                "[NXMColDL Progress] Requeueing failed download "
+                f"ModID {key[0]}, FileID {key[1]} "
+                f"({attempts + 1}/{self.max_retries})"
+            )
+            if mod:
+                QTimer.singleShot(self.retry_delay_ms, lambda m=mod: self.queue_mod(m))
+            return
+
+        self.failed_keys.add(key)
+        self.failed_count += 1
+        self.completed_count += self.key_counts.get(key, 1)
+        self.update_progress()
+        self.finish_if_complete()
+
+    def on_download_paused(self, download_id):
+        if not self.is_tracking or int(download_id) not in self.download_ids:
+            return
+        qDebug(f"[NXMColDL Progress] Download paused: ID {download_id}")
+        self.detail_label.setText("A tracked download is paused in MO2.")
+        self.detail_label.setStyleSheet("color: orange;")
 
     def on_download_removed(self, download_id):
-        """Called when a download is removed/cancelled"""
-        pass
+        if not self.is_tracking:
+            return
+
+        key = self.download_ids.pop(int(download_id), None)
+        if key is None or key in self.completed_keys or key in self.failed_keys:
+            return
+
+        qDebug(f"[NXMColDL Progress] Download removed: ID {download_id}")
+        self.failed_keys.add(key)
+        self.failed_count += 1
+        self.completed_count += self.key_counts.get(key, 1)
+        self.update_progress()
+        self.finish_if_complete()
+
+    def reconcile_completed_downloads(self):
+        """Credit downloads that MO2 completed without emitting a tracked callback."""
+        if not self.is_tracking:
+            self.reconcile_timer.stop()
+            return
+
+        completed_on_disk = downloadedFileKeys(downloadDirectory())
+        newly_completed = (
+            completed_on_disk
+            & set(self.key_counts) - self.completed_keys - self.failed_keys
+        )
+        for key in newly_completed:
+            download_ids = [
+                download_id
+                for download_id, download_key in self.download_ids.items()
+                if download_key == key
+            ]
+            for download_id in download_ids:
+                self.download_ids.pop(download_id, None)
+
+            self.completed_keys.add(key)
+            self.completed_count += self.key_counts.get(key, 1)
+            qDebug(
+                "[NXMColDL Progress] Reconciled completed download from disk: "
+                f"ModID {key[0]}, FileID {key[1]}"
+            )
+
+        if newly_completed:
+            self.update_progress()
+            self.finish_if_complete()
+
+        if self.is_tracking:
+            self.retry_stale_unfinished_downloads()
+
+    def retry_stale_unfinished_downloads(self):
+        """Requeue zero-byte unfinished files that MO2 left idle without a callback."""
+        if not self.stale_unfinished_seconds:
+            return
+
+        downloads_dir = downloadDirectory()
+        pending_keys = set(self.key_counts) - self.completed_keys - self.failed_keys
+        entries_by_key = unfinishedDownloadEntries(downloads_dir)
+        now = time.time()
+
+        for key in pending_keys:
+            entries = entries_by_key.get(key)
+            if not entries:
+                continue
+            if any(entry["archive_size"] > 0 for entry in entries):
+                continue
+            newest_mtime = max(entry["mtime"] for entry in entries)
+            if now - newest_mtime < self.stale_unfinished_seconds:
+                continue
+
+            attempts = self.retry_attempts.get(key, 0)
+            if attempts >= self.max_retries:
+                self.failed_keys.add(key)
+                self.failed_count += 1
+                self.completed_count += self.key_counts.get(key, 1)
+                qDebug(
+                    "[NXMColDL Progress] Zero-byte unfinished download exhausted retries: "
+                    f"ModID {key[0]}, FileID {key[1]}"
+                )
+                continue
+
+            mod = self.mod_by_key(key)
+            if not mod:
+                continue
+
+            self.retry_attempts[key] = attempts + 1
+            self.retry_count += 1
+            self.queued_keys.discard(key)
+            download_ids = [
+                download_id
+                for download_id, download_key in self.download_ids.items()
+                if download_key == key
+            ]
+            for download_id in download_ids:
+                self.download_ids.pop(download_id, None)
+
+            for entry in entries:
+                for path_key in ("archive", "metadata"):
+                    try:
+                        entry[path_key].unlink(missing_ok=True)
+                    except OSError as exc:
+                        qDebug(
+                            "[NXMColDL Progress] Failed removing stale unfinished "
+                            f"{path_key} for ModID {key[0]}, FileID {key[1]}: {exc}"
+                        )
+
+            mod_name = self.mod_label(mod)
+            self.detail_label.setText(
+                f"Retrying stalled {mod_name} ({attempts + 1}/{self.max_retries})..."
+            )
+            self.detail_label.setStyleSheet("color: orange;")
+            qDebug(
+                "[NXMColDL Progress] Requeueing stale zero-byte unfinished download "
+                f"ModID {key[0]}, FileID {key[1]} "
+                f"({attempts + 1}/{self.max_retries})"
+            )
+            self.queued_keys.add(key)
+            QTimer.singleShot(self.retry_delay_ms, lambda m=mod: self.queue_mod(m))
+
+        self.update_progress()
+        self.finish_if_complete()
+
+    def finish_if_complete(self):
+        if self.completed_count < self.total_mods:
+            return
+
+        qDebug(
+            f"[NXMColDL Progress] Download tracking complete. {self.failed_count} failed."
+        )
+        self.is_tracking = False
+        self.reconcile_timer.stop()
+        if self.failed_count == 0 and self.on_complete:
+            if self.close_on_success:
+                self.accept()
+            QTimer.singleShot(0, self.on_complete)
+        elif self.failed_count == 0 and self.success_close_delay_ms:
+            QTimer.singleShot(self.success_close_delay_ms, self.accept)
 
     def update_progress(self):
         """Update the progress display"""
@@ -672,7 +977,12 @@ class stepDownloadProgress(QDialog):
             )
             self.detail_label.setStyleSheet("color: orange;")
         elif self.completed_count >= self.total_mods:
-            self.detail_label.setText("All downloads completed!")
+            if self.retry_count:
+                self.detail_label.setText(
+                    f"All downloads completed after {self.retry_count} retry attempt(s)!"
+                )
+            else:
+                self.detail_label.setText("All downloads completed!")
             self.detail_label.setStyleSheet("color: green;")
         else:
             self.detail_label.setText(
@@ -682,10 +992,11 @@ class stepDownloadProgress(QDialog):
 
 
 class stepDownload(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, on_complete=None):
         super().__init__(parent)
         self.setWindowTitle("NXM Collection Downloader - Downloading...")
         self.setMinimumWidth(150)
+        self.on_complete = on_complete
 
         self.layout = QVBoxLayout()
         self.label = QLabel("Preparing to download selected mods...")
@@ -734,17 +1045,32 @@ class stepDownload(QDialog):
                 )
                 mods_to_download = var.essentialMods + var.chosenOptional
                 qDebug(f"[NXMColDL] Queueing {len(mods_to_download)} downloads")
-                self.progress_dialog = stepDownloadProgress(
-                    self.parent(), len(mods_to_download)
-                )
-                for mod in mods_to_download:
-                    mod_id = mod["file"]["mod"]["modId"]
-                    file_id = mod["file"]["fileId"]
-                    mod_name = mod["file"]["mod"]["name"]
-                    qDebug(
-                        f"[NXMColDL] stepDownload: Queueing download - ModID: {mod_id}, FileID: {file_id}, Name: {mod_name}"
+                max_retries = int(
+                    plugin_instance._organizer.pluginSetting(
+                        plugin_instance.name(), "download_retry_count"
                     )
-                    plugin_instance.downloadMod(mod)
+                    or 0
+                )
+                success_close_delay_ms = 1000 * int(
+                    plugin_instance._organizer.pluginSetting(
+                        plugin_instance.name(), "download_success_close_delay_seconds"
+                    )
+                    or 0
+                )
+                stale_unfinished_seconds = int(
+                    plugin_instance._organizer.pluginSetting(
+                        plugin_instance.name(), "stale_unfinished_retry_seconds"
+                    )
+                    or 0
+                )
+                self.progress_dialog = stepDownloadProgress(
+                    self.parent(),
+                    mods_to_download,
+                    on_complete=self.on_complete,
+                    max_retries=max_retries,
+                    stale_unfinished_seconds=stale_unfinished_seconds,
+                    success_close_delay_ms=success_close_delay_ms,
+                )
 
                 self.label.setText(f"Queued {len(mods_to_download)} downloads in MO2.")
         else:
@@ -826,3 +1152,117 @@ class stepDownload(QDialog):
 
     def submit(self):
         self.close()
+
+
+class stepCollectionLinkFlow(QDialog):
+    """Fetch, download, and optionally install a collection from a direct link."""
+
+    def __init__(self, collection_url, parent=None, auto_install=True):
+        super().__init__(parent)
+        self.collection_url = collection_url
+        self.auto_install = auto_install
+        self.metadata = None
+        self.setWindowTitle("NXM Collection Downloader")
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout()
+        self.label = QLabel("Preparing collection download...")
+        self.label.setWordWrap(True)
+        layout.addWidget(self.label)
+
+        self.setLayout(layout)
+        QTimer.singleShot(0, self.start)
+
+    def fail(self, message):
+        qDebug(f"[NXMColDL] Direct collection flow failed: {message}")
+        QMessageBox.critical(self, "Collection Download Failed", message)
+        self.reject()
+
+    def start(self):
+        if not applyCollectionAddress(self.collection_url):
+            self.fail("The Nexus collection link was not recognized.")
+            return
+
+        if not populateCollectionInfo():
+            self.fail("Failed to fetch collection information from Nexus Mods.")
+            return
+
+        if var.revision is None:
+            var.revision = selectLatestRevision()
+            if var.revision is None:
+                self.fail("Failed to determine the latest collection revision.")
+                return
+
+        self.label.setText(f"Fetching collection manifest for {var.name}...")
+        mods = fetchModInfo(var.uri)
+        if mods is None:
+            self.fail("Failed to fetch collection mod information from Nexus Mods.")
+            return
+
+        populateCollectionMods(mods)
+        var.chosenOptional = list(var.optionalMods)
+
+        plugin_instance = getattr(__meta__, "_download_plugin", None)
+        if not plugin_instance or not getattr(plugin_instance, "_organizer", None):
+            self.fail("Failed to access Mod Organizer.")
+            return
+
+        try:
+            base_path = Path(plugin_instance._organizer.basePath())
+            metadata_file = var.saveCollectionMetadata(base_path)
+            self.metadata = var.loadCollectionMetadata(
+                base_path, var.game, var.collection, var.revision
+            )
+            qDebug(f"[NXMColDL] Collection metadata saved to: {metadata_file}")
+        except (ValueError, IOError) as e:
+            self.fail(f"Failed to save collection metadata:\n\n{e}")
+            return
+
+        if var.chosenExternal and var.externalMods:
+            for mod in var.externalMods:
+                QDesktopServices.openUrl(QUrl(mod["resourceUrl"]))
+
+        if var.bundledMods:
+            qDebug(
+                "[NXMColDL] Direct collection flow found unsupported bundled "
+                f"resources: {len(var.bundledMods)}"
+            )
+
+        mods_to_download = var.essentialMods + var.chosenOptional
+        max_retries = int(
+            plugin_instance._organizer.pluginSetting(
+                plugin_instance.name(), "download_retry_count"
+            )
+            or 0
+        )
+        success_close_delay_ms = 1000 * int(
+            plugin_instance._organizer.pluginSetting(
+                plugin_instance.name(), "download_success_close_delay_seconds"
+            )
+            or 0
+        )
+        stale_unfinished_seconds = int(
+            plugin_instance._organizer.pluginSetting(
+                plugin_instance.name(), "stale_unfinished_retry_seconds"
+            )
+            or 0
+        )
+        self.progress_dialog = stepDownloadProgress(
+            self.parent(),
+            mods_to_download,
+            on_complete=self.install_after_download if self.auto_install else None,
+            max_retries=max_retries,
+            stale_unfinished_seconds=stale_unfinished_seconds,
+            close_on_success=self.auto_install,
+            success_close_delay_ms=success_close_delay_ms,
+        )
+        self.hide()
+        self.progress_dialog.exec()
+        self.accept()
+
+    def install_after_download(self):
+        if not self.metadata:
+            return
+        from .install import installCollectionMetadata
+
+        installCollectionMetadata(self.metadata, self.parent())
