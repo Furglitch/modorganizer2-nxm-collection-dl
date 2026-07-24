@@ -731,16 +731,15 @@ class stepDownloadProgress(QDialog):
             key = self.mod_key(mod)
             if key in self.completed_keys or key in self.queued_keys:
                 continue
-            if key in self.already_downloaded_keys:
-                self.completed_keys.add(key)
-                skipped += self.key_counts.get(key, 1)
+            if self.is_already_downloaded(key):
+                if self.mark_key_completed(key, "Skipped already-downloaded archive"):
+                    skipped += self.key_counts.get(key, 1)
                 continue
             self.cleanup_stale_unfinished_before_queue(key)
             self.queued_keys.add(key)
             self.queue_mod(mod)
 
         if skipped:
-            self.completed_count = skipped
             qDebug(
                 f"[NXMColDL Progress] Skipped {skipped} already-downloaded archive(s)"
             )
@@ -750,6 +749,24 @@ class stepDownloadProgress(QDialog):
             self.finish_if_complete()
         elif self.completed_count >= self.total_mods:
             self.finish_if_complete()
+
+    def mark_key_completed(self, key, reason):
+        """Count a collection entry as complete after its archive is on disk."""
+        if key in self.completed_keys or key in self.failed_keys:
+            return False
+
+        self.completed_keys.add(key)
+        self.completed_count += self.key_counts.get(key, 1)
+        qDebug(f"[NXMColDL Progress] {reason}: ModID {key[0]}, FileID {key[1]}")
+        return True
+
+    def is_already_downloaded(self, key):
+        """Refresh disk state and report whether this Nexus file is complete."""
+        if key in self.already_downloaded_keys:
+            return True
+
+        self.already_downloaded_keys = downloadedFileKeys(downloadDirectory())
+        return key in self.already_downloaded_keys
 
     def cleanup_stale_unfinished_before_queue(self, key):
         """Remove empty leftovers before MO2 sees a duplicate file."""
@@ -795,6 +812,11 @@ class stepDownloadProgress(QDialog):
         if not self.is_tracking:
             return
         if key in self.completed_keys or key in self.failed_keys:
+            return
+        if self.is_already_downloaded(key):
+            if self.mark_key_completed(key, "Skipped already-downloaded archive"):
+                self.update_progress()
+                self.finish_if_complete()
             return
 
         self.cleanup_stale_unfinished_before_queue(key)
@@ -903,12 +925,7 @@ class stepDownloadProgress(QDialog):
             for download_id in download_ids:
                 self.download_ids.pop(download_id, None)
 
-            self.completed_keys.add(key)
-            self.completed_count += self.key_counts.get(key, 1)
-            qDebug(
-                "[NXMColDL Progress] Reconciled completed download from disk: "
-                f"ModID {key[0]}, FileID {key[1]}"
-            )
+            self.mark_key_completed(key, "Reconciled completed download from disk")
 
         if newly_completed:
             self.update_progress()
