@@ -4,8 +4,10 @@ import unittest
 
 from collection_helpers import (
     allocateUniqueModName,
+    coerceDownloadId,
     downloadCompletionPlan,
     downloadedFileKeys,
+    hasPartialUnfinishedEntries,
     installerDefaultActionLabel,
     normalizedButtonLabel,
     parseCollectionAddress,
@@ -150,6 +152,36 @@ class UnfinishedDownloadEntriesTests(unittest.TestCase):
         self.assertEqual(staleZeroByteUnfinishedEntries([fresh_entry], 200, 60), [])
         self.assertEqual(staleZeroByteUnfinishedEntries([partial_entry], 200, 60), [])
         self.assertEqual(zeroByteUnfinishedEntries([partial_entry]), [])
+
+    def test_identifies_resumable_partial_unfinished_entries(self):
+        partial_entry = {
+            "archive": Path("Partial.7z.unfinished"),
+            "metadata": Path("Partial.7z.unfinished.meta"),
+            "archive_size": 128,
+            "mtime": 100,
+        }
+        empty_entry = {
+            "archive": Path("Empty.7z.unfinished"),
+            "metadata": Path("Empty.7z.unfinished.meta"),
+            "archive_size": 0,
+            "mtime": 100,
+        }
+
+        self.assertTrue(hasPartialUnfinishedEntries([partial_entry]))
+        self.assertTrue(hasPartialUnfinishedEntries([empty_entry, partial_entry]))
+        self.assertFalse(hasPartialUnfinishedEntries([empty_entry]))
+        self.assertFalse(hasPartialUnfinishedEntries([]))
+
+
+class CoerceDownloadIdTests(unittest.TestCase):
+    def test_accepts_non_negative_integer_values(self):
+        self.assertEqual(coerceDownloadId(0), 0)
+        self.assertEqual(coerceDownloadId("42"), 42)
+
+    def test_rejects_missing_invalid_and_negative_values(self):
+        self.assertIsNone(coerceDownloadId(None))
+        self.assertIsNone(coerceDownloadId("not-an-id"))
+        self.assertIsNone(coerceDownloadId(-1))
 
 
 class InstallerDefaultActionLabelTests(unittest.TestCase):

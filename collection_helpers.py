@@ -222,6 +222,11 @@ def zeroByteUnfinishedEntries(entries):
     return list(entries)
 
 
+def hasPartialUnfinishedEntries(entries):
+    """Return True when MO2 has already written archive data for this file."""
+    return bool(entries) and any(entry["archive_size"] > 0 for entry in entries)
+
+
 def staleZeroByteUnfinishedEntries(entries, now, stale_seconds):
     """Return unfinished entries safe to discard before a retry.
 
@@ -238,3 +243,13 @@ def staleZeroByteUnfinishedEntries(entries, now, stale_seconds):
         return []
 
     return zeroByteUnfinishedEntries(entries)
+
+
+def coerceDownloadId(download_id):
+    """Return a usable MO2 download id, or None for failed queue-start values."""
+    try:
+        coerced = int(download_id)
+    except (TypeError, ValueError):
+        return None
+
+    return coerced if coerced >= 0 else None

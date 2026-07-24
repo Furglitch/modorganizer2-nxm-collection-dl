@@ -23,8 +23,10 @@ from .api import fetchRevisions, fetchInfo, fetchModInfo
 from . import __meta__
 from . import var
 from .collection_helpers import (
+    coerceDownloadId,
     downloadCompletionPlan,
     downloadedFileKeys,
+    hasPartialUnfinishedEntries,
     parseCollectionAddress,
     staleZeroByteUnfinishedEntries,
     unfinishedDownloadEntries,
@@ -666,6 +668,7 @@ class stepDownloadProgress(QDialog):
         self.retry_attempts = {}
         self.key_counts = {}
         self.queued_keys = set()
+        self.waiting_partial_keys = set()
         self.reconcile_timer = QTimer(self)
         self.reconcile_timer.setInterval(1000)
         self.reconcile_timer.timeout.connect(self.reconcile_completed_downloads)
@@ -736,9 +739,12 @@ class stepDownloadProgress(QDialog):
                 if self.mark_key_completed(key, "Skipped already-downloaded archive"):
                     skipped += self.key_counts.get(key, 1)
                 continue
+            if self.wait_for_existing_partial_download(key):
+                continue
             self.cleanup_stale_unfinished_before_queue(key)
             self.queued_keys.add(key)
-            self.queue_mod(mod)
+            if not self.queue_mod(mod):
+                self.handle_queue_start_failed(mod, key)
 
         if skipped:
             qDebug(
@@ -792,6 +798,24 @@ class stepDownloadProgress(QDialog):
             f"before queueing ModID {key[0]}, FileID {key[1]}"
         )
 
+    def wait_for_existing_partial_download(self, key):
+        """Avoid duplicate prompts when MO2 already has a resumable partial file."""
+        entries = unfinishedDownloadEntries(downloadDirectory()).get(key)
+        if not hasPartialUnfinishedEntries(entries):
+            return False
+
+        self.queued_keys.add(key)
+        self.waiting_partial_keys.add(key)
+        qDebug(
+            "[NXMColDL Progress] Waiting for existing partial download "
+            f"for ModID {key[0]}, FileID {key[1]}"
+        )
+        self.detail_label.setText(
+            "Waiting for an existing partial download in MO2 to complete..."
+        )
+        self.detail_label.setStyleSheet("color: orange;")
+        return True
+
     def queue_mod(self, mod):
         plugin_instance = getattr(__meta__, "_download_plugin", None)
         key = self.mod_key(mod)
@@ -802,11 +826,60 @@ class stepDownloadProgress(QDialog):
             f"ModID: {mod_id}, FileID: {file_id}, Name: {mod_name}"
         )
         download_id = plugin_instance.downloadMod(mod)
-        self.download_ids[int(download_id)] = key
+        coerced_download_id = coerceDownloadId(download_id)
+        if coerced_download_id is None:
+            qDebug(
+                "[NXMColDL Progress] MO2 did not return a usable download id "
+                f"for ModID {mod_id}, FileID {file_id}: {download_id}"
+            )
+            return False
+
+        self.download_ids[coerced_download_id] = key
         qDebug(
             "[NXMColDL Progress] Tracking download "
             f"ID {download_id} for ModID {mod_id}, FileID {file_id}"
         )
+        return True
+
+    def handle_queue_start_failed(self, mod, key):
+        """Retry or fail a download that MO2 refused to queue."""
+        self.queued_keys.discard(key)
+        if self.is_already_downloaded(key):
+            if self.mark_key_completed(key, "Skipped already-downloaded archive"):
+                self.update_progress()
+                self.finish_if_complete()
+            return
+
+        attempts = self.retry_attempts.get(key, 0)
+        if attempts < self.max_retries:
+            self.retry_attempts[key] = attempts + 1
+            self.retry_count += 1
+            mod_name = self.mod_label(mod) if mod else f"ModID {key[0]}"
+            self.detail_label.setText(
+                f"Retrying queue start for {mod_name} "
+                f"({attempts + 1}/{self.max_retries})..."
+            )
+            self.detail_label.setStyleSheet("color: orange;")
+            qDebug(
+                "[NXMColDL Progress] Requeueing after failed queue start "
+                f"for ModID {key[0]}, FileID {key[1]} "
+                f"({attempts + 1}/{self.max_retries})"
+            )
+            QTimer.singleShot(
+                self.retry_delay_ms,
+                lambda m=mod, k=key: self.requeue_mod(m, k),
+            )
+            return
+
+        self.failed_keys.add(key)
+        self.failed_count += 1
+        self.completed_count += self.key_counts.get(key, 1)
+        qDebug(
+            "[NXMColDL Progress] Failed to queue download after retries: "
+            f"ModID {key[0]}, FileID {key[1]}"
+        )
+        self.update_progress()
+        self.finish_if_complete()
 
     def requeue_mod(self, mod, key):
         """Requeue a download after clearing empty placeholders for the same file."""
@@ -820,9 +893,12 @@ class stepDownloadProgress(QDialog):
                 self.finish_if_complete()
             return
 
+        if self.wait_for_existing_partial_download(key):
+            return
         self.cleanup_stale_unfinished_before_queue(key)
         self.queued_keys.add(key)
-        self.queue_mod(mod)
+        if not self.queue_mod(mod):
+            self.handle_queue_start_failed(mod, key)
 
     def mod_by_key(self, key):
         for mod in self.mods_to_download:
@@ -927,6 +1003,7 @@ class stepDownloadProgress(QDialog):
                 self.download_ids.pop(download_id, None)
 
             self.mark_key_completed(key, "Reconciled completed download from disk")
+            self.waiting_partial_keys.discard(key)
 
         if newly_completed:
             self.update_progress()
