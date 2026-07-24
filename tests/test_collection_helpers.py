@@ -3,11 +3,13 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from collection_helpers import (
+    allocateUniqueModName,
     downloadCompletionPlan,
     downloadedFileKeys,
     installerDefaultActionLabel,
     normalizedButtonLabel,
     parseCollectionAddress,
+    sanitizeModName,
     staleZeroByteUnfinishedEntries,
     unfinishedDownloadEntries,
     zeroByteUnfinishedEntries,
@@ -248,6 +250,45 @@ class DownloadCompletionPlanTests(unittest.TestCase):
                 "close_delay_ms": 5000,
             },
         )
+
+
+class AllocateUniqueModNameTests(unittest.TestCase):
+    def test_sanitizes_path_separators_and_empty_names(self):
+        self.assertEqual(sanitizeModName(" A/B\\C  "), "A-B-C")
+        self.assertEqual(sanitizeModName("   "), "Collection Mod")
+
+    def test_uses_base_name_when_available(self):
+        used = set()
+        counts = {}
+
+        self.assertEqual(
+            allocateUniqueModName("New Statue", used, counts), "New Statue"
+        )
+        self.assertEqual(used, {"New Statue"})
+        self.assertEqual(counts, {"New Statue": 2})
+
+    def test_suffixes_duplicate_collection_entries(self):
+        used = set()
+        counts = {}
+
+        self.assertEqual(
+            allocateUniqueModName("New Statue", used, counts), "New Statue"
+        )
+        self.assertEqual(
+            allocateUniqueModName("New Statue", used, counts), "New Statue #2"
+        )
+        self.assertEqual(
+            allocateUniqueModName("New Statue", used, counts), "New Statue #3"
+        )
+
+    def test_skips_existing_profile_names(self):
+        used = {"New Statue", "New Statue #2"}
+        counts = {}
+
+        self.assertEqual(
+            allocateUniqueModName("New Statue", used, counts), "New Statue #3"
+        )
+        self.assertEqual(counts, {"New Statue": 4})
 
 
 if __name__ == "__main__":

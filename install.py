@@ -20,7 +20,11 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __meta__, var
-from .collection_helpers import installerDefaultActionLabel, normalizedButtonLabel
+from .collection_helpers import (
+    allocateUniqueModName,
+    installerDefaultActionLabel,
+    normalizedButtonLabel,
+)
 
 qDebug = var.debug
 
@@ -994,27 +998,7 @@ class stepInstallMods(QDialog):
         return download_map
 
     def allocateCollectionModName(self, mod_name, used_mod_names, mod_name_counts):
-        base_name = self.sanitizeModName(mod_name)
-        next_index = mod_name_counts.get(base_name, 1)
-
-        if next_index == 1 and base_name not in used_mod_names:
-            mod_name_counts[base_name] = 2
-            used_mod_names.add(base_name)
-            return base_name
-
-        next_index = max(next_index, 2)
-        while True:
-            candidate = f"{base_name} #{next_index}"
-            if candidate not in used_mod_names:
-                mod_name_counts[base_name] = next_index + 1
-                used_mod_names.add(candidate)
-                return candidate
-            next_index += 1
-
-    def sanitizeModName(self, mod_name):
-        clean_name = str(mod_name).replace("/", "-").replace("\\", "-")
-        clean_name = " ".join(clean_name.split())
-        return clean_name or "Collection Mod"
+        return allocateUniqueModName(mod_name, used_mod_names, mod_name_counts)
 
     def buildInstalledMap(self, mods_path: Path):
         installed_map = {}

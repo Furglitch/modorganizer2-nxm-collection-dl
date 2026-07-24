@@ -68,6 +68,32 @@ def downloadCompletionPlan(failed_count, has_on_complete, close_on_success, dela
     }
 
 
+def sanitizeModName(mod_name):
+    clean_name = str(mod_name).replace("/", "-").replace("\\", "-")
+    clean_name = " ".join(clean_name.split())
+    return clean_name or "Collection Mod"
+
+
+def allocateUniqueModName(mod_name, used_mod_names, mod_name_counts):
+    """Return a stable MO2 mod name without merging collection file entries."""
+    base_name = sanitizeModName(mod_name)
+    next_index = mod_name_counts.get(base_name, 1)
+
+    if next_index == 1 and base_name not in used_mod_names:
+        mod_name_counts[base_name] = 2
+        used_mod_names.add(base_name)
+        return base_name
+
+    next_index = max(next_index, 2)
+    while True:
+        candidate = f"{base_name} #{next_index}"
+        if candidate not in used_mod_names:
+            mod_name_counts[base_name] = next_index + 1
+            used_mod_names.add(candidate)
+            return candidate
+        next_index += 1
+
+
 def parseCollectionAddress(address):
     """Parse supported Nexus collection web and nxm:// addresses."""
     normalized = address.strip()
