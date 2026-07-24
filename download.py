@@ -790,6 +790,17 @@ class stepDownloadProgress(QDialog):
             f"ID {download_id} for ModID {mod_id}, FileID {file_id}"
         )
 
+    def requeue_mod(self, mod, key):
+        """Requeue a download after clearing empty placeholders for the same file."""
+        if not self.is_tracking:
+            return
+        if key in self.completed_keys or key in self.failed_keys:
+            return
+
+        self.cleanup_stale_unfinished_before_queue(key)
+        self.queued_keys.add(key)
+        self.queue_mod(mod)
+
     def mod_by_key(self, key):
         for mod in self.mods_to_download:
             if self.mod_key(mod) == key:
@@ -838,7 +849,10 @@ class stepDownloadProgress(QDialog):
                 f"({attempts + 1}/{self.max_retries})"
             )
             if mod:
-                QTimer.singleShot(self.retry_delay_ms, lambda m=mod: self.queue_mod(m))
+                QTimer.singleShot(
+                    self.retry_delay_ms,
+                    lambda m=mod, k=key: self.requeue_mod(m, k),
+                )
             return
 
         self.failed_keys.add(key)
@@ -967,8 +981,10 @@ class stepDownloadProgress(QDialog):
                 f"ModID {key[0]}, FileID {key[1]} "
                 f"({attempts + 1}/{self.max_retries})"
             )
-            self.queued_keys.add(key)
-            QTimer.singleShot(self.retry_delay_ms, lambda m=mod: self.queue_mod(m))
+            QTimer.singleShot(
+                self.retry_delay_ms,
+                lambda m=mod, k=key: self.requeue_mod(m, k),
+            )
 
         self.update_progress()
         self.finish_if_complete()
