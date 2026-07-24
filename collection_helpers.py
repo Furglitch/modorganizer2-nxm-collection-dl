@@ -162,3 +162,23 @@ def unfinishedDownloadEntries(downloads_dir):
         )
 
     return entries
+
+
+def staleZeroByteUnfinishedEntries(entries, now, stale_seconds):
+    """Return unfinished entries safe to discard before a retry.
+
+    MO2 may leave a zero-byte ``.unfinished`` archive behind when a download
+    never actually starts. Requeueing the same file while that stale entry is
+    present can trigger a blocking "Download again?" dialog. Non-empty partial
+    downloads are intentionally preserved so MO2 can resume them.
+    """
+    if stale_seconds <= 0 or not entries:
+        return []
+    if any(entry["archive_size"] > 0 for entry in entries):
+        return []
+
+    newest_mtime = max(entry["mtime"] for entry in entries)
+    if now - newest_mtime < stale_seconds:
+        return []
+
+    return list(entries)

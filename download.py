@@ -25,6 +25,7 @@ from . import var
 from .collection_helpers import (
     downloadedFileKeys,
     parseCollectionAddress,
+    staleZeroByteUnfinishedEntries,
     unfinishedDownloadEntries,
 )
 
@@ -655,6 +656,7 @@ class stepDownloadProgress(QDialog):
         self.completed_count = 0
         self.failed_count = 0
         self.retry_count = 0
+        self.prequeue_cleanup_count = 0
         self.is_tracking = True
         self.download_ids = {}
         self.completed_keys = set()
@@ -732,6 +734,7 @@ class stepDownloadProgress(QDialog):
                 self.completed_keys.add(key)
                 skipped += self.key_counts.get(key, 1)
                 continue
+            self.cleanup_stale_unfinished_before_queue(key)
             self.queued_keys.add(key)
             self.queue_mod(mod)
 
@@ -746,6 +749,34 @@ class stepDownloadProgress(QDialog):
             self.finish_if_complete()
         elif self.completed_count >= self.total_mods:
             self.finish_if_complete()
+
+    def cleanup_stale_unfinished_before_queue(self, key):
+        """Remove stale zero-byte leftovers before MO2 sees a duplicate file."""
+        if not self.stale_unfinished_seconds:
+            return
+
+        entries = unfinishedDownloadEntries(downloadDirectory()).get(key)
+        stale_entries = staleZeroByteUnfinishedEntries(
+            entries, time.time(), self.stale_unfinished_seconds
+        )
+        if not stale_entries:
+            return
+
+        for entry in stale_entries:
+            for path_key in ("archive", "metadata"):
+                try:
+                    entry[path_key].unlink(missing_ok=True)
+                except OSError as exc:
+                    qDebug(
+                        "[NXMColDL Progress] Failed removing stale unfinished "
+                        f"{path_key} for ModID {key[0]}, FileID {key[1]}: {exc}"
+                    )
+
+        self.prequeue_cleanup_count += 1
+        qDebug(
+            "[NXMColDL Progress] Removed stale zero-byte unfinished download "
+            f"before queueing ModID {key[0]}, FileID {key[1]}"
+        )
 
     def queue_mod(self, mod):
         plugin_instance = getattr(__meta__, "_download_plugin", None)
@@ -888,12 +919,10 @@ class stepDownloadProgress(QDialog):
 
         for key in pending_keys:
             entries = entries_by_key.get(key)
-            if not entries:
-                continue
-            if any(entry["archive_size"] > 0 for entry in entries):
-                continue
-            newest_mtime = max(entry["mtime"] for entry in entries)
-            if now - newest_mtime < self.stale_unfinished_seconds:
+            stale_entries = staleZeroByteUnfinishedEntries(
+                entries, now, self.stale_unfinished_seconds
+            )
+            if not stale_entries:
                 continue
 
             attempts = self.retry_attempts.get(key, 0)
@@ -922,7 +951,7 @@ class stepDownloadProgress(QDialog):
             for download_id in download_ids:
                 self.download_ids.pop(download_id, None)
 
-            for entry in entries:
+            for entry in stale_entries:
                 for path_key in ("archive", "metadata"):
                     try:
                         entry[path_key].unlink(missing_ok=True)

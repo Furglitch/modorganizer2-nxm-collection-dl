@@ -7,6 +7,7 @@ from collection_helpers import (
     installerDefaultActionLabel,
     normalizedButtonLabel,
     parseCollectionAddress,
+    staleZeroByteUnfinishedEntries,
     unfinishedDownloadEntries,
 )
 
@@ -103,6 +104,35 @@ class UnfinishedDownloadEntriesTests(unittest.TestCase):
             )
 
             self.assertEqual(unfinishedDownloadEntries(downloads), {})
+
+    def test_identifies_stale_zero_byte_unfinished_entries(self):
+        entries = [
+            {
+                "archive": Path("Partial.7z.unfinished"),
+                "metadata": Path("Partial.7z.unfinished.meta"),
+                "archive_size": 0,
+                "mtime": 100,
+            }
+        ]
+
+        self.assertEqual(staleZeroByteUnfinishedEntries(entries, 200, 60), entries)
+
+    def test_preserves_fresh_or_non_empty_unfinished_entries(self):
+        fresh_entry = {
+            "archive": Path("Fresh.7z.unfinished"),
+            "metadata": Path("Fresh.7z.unfinished.meta"),
+            "archive_size": 0,
+            "mtime": 190,
+        }
+        partial_entry = {
+            "archive": Path("Partial.7z.unfinished"),
+            "metadata": Path("Partial.7z.unfinished.meta"),
+            "archive_size": 128,
+            "mtime": 100,
+        }
+
+        self.assertEqual(staleZeroByteUnfinishedEntries([fresh_entry], 200, 60), [])
+        self.assertEqual(staleZeroByteUnfinishedEntries([partial_entry], 200, 60), [])
 
 
 class InstallerDefaultActionLabelTests(unittest.TestCase):
