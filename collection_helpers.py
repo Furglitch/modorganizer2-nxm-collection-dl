@@ -2,6 +2,54 @@ import re
 from configparser import ConfigParser
 from pathlib import Path
 
+FOMOD_ADVANCE_EXCLUDED_TITLES = {
+    "",
+    "Error",
+    "Install Mods",
+    "Mod Exists",
+    "Quick Install",
+    "NXM Collection Installer - Installing Mods",
+    "NXM Collection Installer - Select Collection",
+}
+
+
+def normalizedButtonLabel(label):
+    return " ".join(
+        str(label)
+        .replace("&", "")
+        .replace("<", "")
+        .replace(">", "")
+        .strip()
+        .lower()
+        .split()
+    )
+
+
+def installerDefaultActionLabel(window_title, buttons):
+    """Return the FOMOD default action to click, or None when unsafe.
+
+    ``buttons`` is an iterable of ``(label, enabled)`` pairs. The helper is kept
+    GUI-free so the dialog classification can be unit-tested outside MO2.
+    """
+    if window_title in FOMOD_ADVANCE_EXCLUDED_TITLES:
+        return None
+
+    enabled_by_label = {}
+    labels = set()
+    for label, enabled in buttons:
+        normalized = normalizedButtonLabel(label)
+        labels.add(normalized)
+        enabled_by_label[normalized] = bool(enabled)
+
+    if "cancel" not in labels:
+        return None
+
+    for label in ("next", "install"):
+        if enabled_by_label.get(label):
+            return label
+
+    return None
+
 
 def parseCollectionAddress(address):
     """Parse supported Nexus collection web and nxm:// addresses."""

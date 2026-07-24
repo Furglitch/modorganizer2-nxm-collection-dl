@@ -247,6 +247,11 @@ class InstallCollectionTool(mobase.IPluginTool):
                 True,
             ),
             mobase.PluginSetting(
+                "auto_advance_fomod_defaults",
+                "Automatically accept default FOMOD installer choices",
+                False,
+            ),
+            mobase.PluginSetting(
                 "install_files_as_separate_mods",
                 "Install each collection file as a separate named MO2 mod",
                 True,

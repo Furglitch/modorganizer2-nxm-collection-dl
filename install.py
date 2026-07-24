@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __meta__, var
+from .collection_helpers import installerDefaultActionLabel, normalizedButtonLabel
 
 qDebug = var.debug
 
@@ -61,8 +62,7 @@ def installCollectionMetadata(metadata, parent=None):
 def clickButtonByText(widget, texts):
     wanted = {text.lower() for text in texts}
     for button in widget.findChildren(QPushButton):
-        label = button.text().replace("&", "").strip().lower()
-        if label in wanted and button.isEnabled():
+        if normalizedButtonLabel(button.text()) in wanted and button.isEnabled():
             suppressDialogAndClick(widget, button)
             return True
     return False
@@ -88,7 +88,7 @@ def acceptQuickInstallDialog():
                 return
 
         for button in widget.findChildren(QPushButton):
-            if button.text().replace("&", "").lower() == "ok" and button.isEnabled():
+            if normalizedButtonLabel(button.text()) == "ok" and button.isEnabled():
                 qDebug("[NXMColDL Install] Auto-accepting Quick Install dialog")
                 suppressDialogAndClick(widget, button)
                 return
@@ -118,7 +118,7 @@ def dismissKnownPostInstallErrorDialog(remaining=20):
                 return
 
         for button in widget.findChildren(QPushButton):
-            if button.text().replace("&", "").lower() == "ok" and button.isEnabled():
+            if normalizedButtonLabel(button.text()) == "ok" and button.isEnabled():
                 qDebug("[NXMColDL Install] Dismissing known post-install error dialog")
                 suppressDialogAndClick(widget, button)
                 return
@@ -134,6 +134,40 @@ def acceptModExistsDialog():
         if clickButtonByText(widget, ("Merge",)):
             qDebug("[NXMColDL Install] Auto-merging Mod Exists dialog")
             return
+
+
+def installerDefaultAction(widget):
+    """Return the safest default-action button for a visible FOMOD installer."""
+    if not widget.isVisible():
+        return None
+
+    buttons = widget.findChildren(QPushButton)
+    action = installerDefaultActionLabel(
+        widget.windowTitle(),
+        ((button.text(), button.isEnabled()) for button in buttons),
+    )
+    if action is None:
+        return None
+
+    for button in buttons:
+        if normalizedButtonLabel(button.text()) == action:
+            return button
+
+
+def advanceInstallerDialogDefaults():
+    for widget in QApplication.topLevelWidgets():
+        button = installerDefaultAction(widget)
+        if not button:
+            continue
+
+        qDebug(
+            "[NXMColDL Install] Auto-advancing installer defaults for "
+            f"{widget.windowTitle()}"
+        )
+        suppressDialogAndClick(widget, button)
+        return True
+
+    return False
 
 
 def scheduleInstallDialogHandlers(
@@ -377,6 +411,7 @@ class stepInstallMods(QDialog):
         self.install_warnings = []
         self.install_context = None
         self.cancel_requested = False
+        self.dialog_handler_generation = 0
 
         # Start installation after dialog is shown
         QTimer.singleShot(500, self.startInstallation)
@@ -588,6 +623,8 @@ class stepInstallMods(QDialog):
 
         log_path, log_offset = self.captureInterfaceLogPosition(organizer)
         try:
+            self.dialog_handler_generation += 1
+            dialog_handler_generation = self.dialog_handler_generation
             scheduleInstallDialogHandlers(
                 organizer.pluginSetting(
                     plugin_instance.name(), "auto_accept_quick_install"
@@ -600,6 +637,10 @@ class stepInstallMods(QDialog):
                     plugin_instance.name(), "auto_merge_existing_mods"
                 ),
             )
+            if organizer.pluginSetting(
+                plugin_instance.name(), "auto_advance_fomod_defaults"
+            ):
+                self.scheduleInstallerDefaultAdvancer(dialog_handler_generation)
 
             if context["separate_file_installs"]:
                 target_mod_name = self.allocateCollectionModName(
@@ -651,9 +692,24 @@ class stepInstallMods(QDialog):
         self.log("")
         QTimer.singleShot(1500, self.installNextMod)
 
+    def scheduleInstallerDefaultAdvancer(self, generation, remaining=240):
+        if remaining <= 0:
+            return
+        if generation != self.dialog_handler_generation:
+            return
+        if not self.install_context:
+            return
+
+        advanceInstallerDialogDefaults()
+        QTimer.singleShot(
+            250,
+            lambda: self.scheduleInstallerDefaultAdvancer(generation, remaining - 1),
+        )
+
     def finishInstallation(self, cancelled=False):
         if not self.install_context:
             return
+        self.dialog_handler_generation += 1
 
         context = self.install_context
         organizer = context["organizer"]

@@ -4,6 +4,8 @@ import unittest
 
 from collection_helpers import (
     downloadedFileKeys,
+    installerDefaultActionLabel,
+    normalizedButtonLabel,
     parseCollectionAddress,
     unfinishedDownloadEntries,
 )
@@ -101,6 +103,44 @@ class UnfinishedDownloadEntriesTests(unittest.TestCase):
             )
 
             self.assertEqual(unfinishedDownloadEntries(downloads), {})
+
+
+class InstallerDefaultActionLabelTests(unittest.TestCase):
+    def test_normalizes_decorated_button_labels(self):
+        self.assertEqual(normalizedButtonLabel("&Next >"), "next")
+        self.assertEqual(normalizedButtonLabel("< &Back"), "back")
+
+    def test_selects_enabled_next_on_fomod_dialog(self):
+        self.assertEqual(
+            installerDefaultActionLabel(
+                "Glorious Doors of Skyrim (GDOS) SE",
+                [("&Back", False), ("&Next >", True), ("Cancel", True)],
+            ),
+            "next",
+        )
+
+    def test_selects_enabled_install_on_final_fomod_page(self):
+        self.assertEqual(
+            installerDefaultActionLabel(
+                "UNP Female Body Renewal",
+                [("&Back", True), ("Install", True), ("Cancel", True)],
+            ),
+            "install",
+        )
+
+    def test_ignores_mo2_known_dialogs(self):
+        for title in ("Quick Install", "Mod Exists", "Error"):
+            self.assertIsNone(
+                installerDefaultActionLabel(
+                    title,
+                    [("Next", True), ("Install", True), ("Cancel", True)],
+                )
+            )
+
+    def test_requires_cancel_button_to_avoid_generic_next_prompts(self):
+        self.assertIsNone(
+            installerDefaultActionLabel("NXM Collection Link Handler", [("Next", True)])
+        )
 
 
 if __name__ == "__main__":

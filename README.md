@@ -39,7 +39,9 @@ choices. Installed mods are not enabled by default; enable
 to check them in MO2 after it finishes. Collection files are installed as
 separate MO2 mod rows by default; repeated files from the same Nexus mod use
 `#2`, `#3`, and later suffixes instead of silently merging into one row. FOMOD
-choice replay is not implemented.
+choice replay is not implemented, but `auto_advance_fomod_defaults` can
+optionally advance visible FOMOD installers by accepting their selected default
+choices.
 
 ## Contributing
 
