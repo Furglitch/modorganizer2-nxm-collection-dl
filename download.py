@@ -23,6 +23,7 @@ from .api import fetchRevisions, fetchInfo, fetchModInfo
 from . import __meta__
 from . import var
 from .collection_helpers import (
+    downloadCompletionPlan,
     downloadedFileKeys,
     parseCollectionAddress,
     staleZeroByteUnfinishedEntries,
@@ -1015,12 +1016,18 @@ class stepDownloadProgress(QDialog):
         )
         self.is_tracking = False
         self.reconcile_timer.stop()
-        if self.failed_count == 0 and self.on_complete:
-            if self.close_on_success:
-                self.accept()
+        plan = downloadCompletionPlan(
+            self.failed_count,
+            self.on_complete is not None,
+            self.close_on_success,
+            self.success_close_delay_ms,
+        )
+        if plan["close_immediately"]:
+            self.accept()
+        if plan["run_complete"]:
             QTimer.singleShot(0, self.on_complete)
-        elif self.failed_count == 0 and self.success_close_delay_ms:
-            QTimer.singleShot(self.success_close_delay_ms, self.accept)
+        if plan["close_delay_ms"]:
+            QTimer.singleShot(plan["close_delay_ms"], self.accept)
 
     def update_progress(self):
         """Update the progress display"""

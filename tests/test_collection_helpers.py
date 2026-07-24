@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from collection_helpers import (
+    downloadCompletionPlan,
     downloadedFileKeys,
     installerDefaultActionLabel,
     normalizedButtonLabel,
@@ -184,6 +185,68 @@ class InstallerDefaultActionLabelTests(unittest.TestCase):
     def test_requires_cancel_button_to_avoid_generic_next_prompts(self):
         self.assertIsNone(
             installerDefaultActionLabel("NXM Collection Link Handler", [("Next", True)])
+        )
+
+
+class DownloadCompletionPlanTests(unittest.TestCase):
+    def test_failed_downloads_keep_dialog_open_for_review(self):
+        self.assertEqual(
+            downloadCompletionPlan(
+                failed_count=1,
+                has_on_complete=True,
+                close_on_success=True,
+                delay_ms=5000,
+            ),
+            {
+                "run_complete": False,
+                "close_immediately": False,
+                "close_delay_ms": 0,
+            },
+        )
+
+    def test_auto_install_flow_closes_before_running_callback(self):
+        self.assertEqual(
+            downloadCompletionPlan(
+                failed_count=0,
+                has_on_complete=True,
+                close_on_success=True,
+                delay_ms=5000,
+            ),
+            {
+                "run_complete": True,
+                "close_immediately": True,
+                "close_delay_ms": 0,
+            },
+        )
+
+    def test_manual_followup_flow_still_gets_success_close_delay(self):
+        self.assertEqual(
+            downloadCompletionPlan(
+                failed_count=0,
+                has_on_complete=True,
+                close_on_success=False,
+                delay_ms=5000,
+            ),
+            {
+                "run_complete": True,
+                "close_immediately": False,
+                "close_delay_ms": 5000,
+            },
+        )
+
+    def test_plain_success_flow_uses_success_close_delay(self):
+        self.assertEqual(
+            downloadCompletionPlan(
+                failed_count=0,
+                has_on_complete=False,
+                close_on_success=False,
+                delay_ms=5000,
+            ),
+            {
+                "run_complete": False,
+                "close_immediately": False,
+                "close_delay_ms": 5000,
+            },
         )
 
 

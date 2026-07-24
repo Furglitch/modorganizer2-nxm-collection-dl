@@ -51,6 +51,23 @@ def installerDefaultActionLabel(window_title, buttons):
     return None
 
 
+def downloadCompletionPlan(failed_count, has_on_complete, close_on_success, delay_ms):
+    """Return terminal actions for a successful download progress dialog."""
+    if failed_count:
+        return {
+            "run_complete": False,
+            "close_immediately": False,
+            "close_delay_ms": 0,
+        }
+
+    close_delay_ms = max(0, int(delay_ms or 0))
+    return {
+        "run_complete": bool(has_on_complete),
+        "close_immediately": bool(close_on_success),
+        "close_delay_ms": 0 if close_on_success else close_delay_ms,
+    }
+
+
 def parseCollectionAddress(address):
     """Parse supported Nexus collection web and nxm:// addresses."""
     normalized = address.strip()
