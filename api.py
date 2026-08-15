@@ -1,8 +1,13 @@
 import json
+import ssl
 import urllib.request
 from PyQt6.QtCore import qDebug
+import certifi
 
 from . import var
+
+
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 def nxmFetch(requestData):
@@ -16,7 +21,7 @@ def nxmFetch(requestData):
         "https://api.nexusmods.com/v2/graphql", data=jsonData, headers=headers
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, context=SSL_CONTEXT) as response:
             content = response.read()
             resp = json.loads(content)
             qDebug(var.cleanJson(resp))
