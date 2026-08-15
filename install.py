@@ -303,8 +303,17 @@ class stepInstallMods(QDialog):
             self.log(f"Found {len(download_map)} downloaded files")
             self.log("")
 
+            installed_mod_names = set()
+            for mod in modlist.allMods():
+                try:
+                    installed_mod_names.add(mod.name().casefold())
+                except Exception:
+                    continue
+
             # Install each mod in order
             installed_mods = []
+            skipped_mods = []
+            failed_mods = []
             for idx, mod_info in enumerate(mods_to_install, 1):
                 self.progress_label.setText(
                     f"Installing mod {idx}/{len(mods_to_install)}"
@@ -319,10 +328,17 @@ class stepInstallMods(QDialog):
                 self.log(f"[{idx}/{len(mods_to_install)}] Processing: {mod_name}")
                 self.log(f"  File: {file_name} (ModID: {mod_id}, FileID: {file_id})")
 
+                if mod_name.casefold() in installed_mod_names:
+                    self.log("  Already installed - skipping", "warning")
+                    skipped_mods.append(mod_name)
+                    self.log("")
+                    continue
+
                 # Find downloaded file
                 download_key = (int(mod_id), int(file_id))
                 if download_key not in download_map:
                     self.log("  ERROR: Not found in downloads - skipping", "error")
+                    failed_mods.append(mod_name)
                     self.log("")
                     continue
 
@@ -348,12 +364,15 @@ class stepInstallMods(QDialog):
                             )
 
                         installed_mods.append(internal_name)
+                        installed_mod_names.add(internal_name.casefold())
                     else:
                         self.log(
                             "  ERROR: Installation failed or was cancelled", "error"
                         )
+                        failed_mods.append(mod_name)
                 except Exception as e:
                     self.log(f"  ERROR: Installation error: {e}", "error")
+                    failed_mods.append(mod_name)
 
                 self.log("")
 
@@ -364,12 +383,20 @@ class stepInstallMods(QDialog):
             self.log("Installation Summary:", "success")
             self.log(f"  Total mods: {len(mods_to_install)}")
             self.log(f"  Successfully installed: {len(installed_mods)}")
-            self.log(f"  Failed/Skipped: {len(mods_to_install) - len(installed_mods)}")
+            self.log(f"  Skipped already installed: {len(skipped_mods)}")
+            self.log(f"  Failed: {len(failed_mods)}")
             qDebug(
                 f"[NXMColDL] Installation complete: {len(installed_mods)}/{len(mods_to_install)} succeeded"
             )
 
-            if len(installed_mods) < len(mods_to_install):
+            if skipped_mods:
+                self.log("", "warning")
+                self.log(
+                    "Some mods were already installed and were skipped.",
+                    "warning",
+                )
+
+            if failed_mods:
                 self.log("", "warning")
                 self.log(
                     "Some mods were not installed. Make sure all mods are downloaded first.",
