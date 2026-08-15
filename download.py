@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from PyQt6.QtCore import QObject, QSize, QThread, Qt, QUrl, pyqtSignal, qDebug
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
@@ -628,24 +629,38 @@ class stepDownload(QDialog):
 
         plugin_instance = getattr(__meta__, "_download_plugin", None)
         if plugin_instance is not None:
+            downloads_path = Path(plugin_instance._organizer.downloadsPath())
+            download_map = self.buildDownloadMap(downloads_path)
+
             # Always open external resources if user chose to
             if var.chosenExternal and var.externalMods:
                 for mod in var.externalMods:
                     QDesktopServices.openUrl(QUrl(mod["resourceUrl"]))
 
+            mods_to_handle = var.essentialMods + var.chosenOptional
+            queued_mods = []
+
             if var.openModWebsites:
                 # User chose to open websites instead of downloading
-                for mod in var.essentialMods + var.chosenOptional:
+                for mod in mods_to_handle:
                     mod_id = mod["file"]["mod"]["modId"]
                     mod_url = f"https://www.nexusmods.com/{var.game}/mods/{mod_id}"
+                    download_key = (int(mod_id), int(mod["file"]["fileId"]))
+                    if download_key in download_map:
+                        qDebug(
+                            f"[NXMColDL] Skipping already downloaded mod: {mod['file']['mod']['name']}"
+                        )
+                        continue
+
+                    queued_mods.append(mod)
                     self.mod_urls_to_open.append((mod["file"]["mod"]["name"], mod_url))
+
                 self.label.setText(
                     f"Ready to open {len(self.mod_urls_to_open)} mod website(s) in batches."
                 )
 
                 # Save collection metadata for later installation
                 try:
-                    from pathlib import Path
                     base_path = Path(plugin_instance._organizer.basePath())
                     metadata_file = var.saveCollectionMetadata(base_path)
                     qDebug(f"[NXMColDL] Collection metadata saved to: {metadata_file}")
@@ -659,13 +674,22 @@ class stepDownload(QDialog):
                     )
             else:
                 # Queue downloads and show progress tracker
-                mods_to_download = var.essentialMods + var.chosenOptional
-                for mod in mods_to_download:
+                for mod in mods_to_handle:
+                    mod_id = int(mod["file"]["mod"]["modId"])
+                    file_id = int(mod["file"]["fileId"])
+                    if (mod_id, file_id) in download_map:
+                        qDebug(
+                            f"[NXMColDL] Skipping already downloaded mod: {mod['file']['mod']['name']}"
+                        )
+                        continue
+
+                    queued_mods.append(mod)
+
+                for mod in queued_mods:
                     plugin_instance.downloadMod(mod)
 
                 # Save collection metadata for later installation
                 try:
-                    from pathlib import Path
                     base_path = Path(plugin_instance._organizer.basePath())
                     metadata_file = var.saveCollectionMetadata(base_path)
                     qDebug(f"[NXMColDL] Collection metadata saved to: {metadata_file}")
@@ -679,10 +703,17 @@ class stepDownload(QDialog):
                     )
 
                 self.close()
-                progress_dialog = stepDownloadProgress(
-                    self.parent(), len(mods_to_download)
-                )
-                progress_dialog.exec()
+                if queued_mods:
+                    progress_dialog = stepDownloadProgress(
+                        self.parent(), len(queued_mods)
+                    )
+                    progress_dialog.exec()
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Already Downloaded",
+                        "All selected mods are already downloaded. No new downloads were queued.",
+                    )
                 return
 
         else:
@@ -755,3 +786,45 @@ class stepDownload(QDialog):
 
     def submit(self):
         self.close()
+
+    def buildDownloadMap(self, downloads_path: Path):
+        download_map = {}
+
+        if not downloads_path.exists():
+            qDebug(f"[NXMColDL] Downloads path not found: {downloads_path}")
+            return download_map
+
+        qDebug(f"[NXMColDL] Building download map from: {downloads_path}")
+        for meta_file in downloads_path.glob("*.meta"):
+            try:
+                download_file = meta_file.with_suffix("")
+                if not download_file.exists() or download_file.is_dir():
+                    continue
+
+                mod_id = None
+                file_id = None
+
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("modID="):
+                            mod_id = int(line.split("=", 1)[1])
+                        elif line.startswith("fileID="):
+                            file_id = int(line.split("=", 1)[1])
+
+                        if mod_id is not None and file_id is not None:
+                            break
+
+                if mod_id is not None and file_id is not None:
+                    download_map[(mod_id, file_id)] = download_file
+                else:
+                    qDebug(
+                        f"[NXMColDL] Incomplete metadata in {meta_file.name}: modID={mod_id}, fileID={file_id}"
+                    )
+
+            except (ValueError, IOError) as e:
+                qDebug(f"[NXMColDL] Error parsing {meta_file.name}: {e}")
+            except Exception as e:
+                qDebug(f"[NXMColDL] Unexpected error parsing {meta_file.name}: {e}")
+
+        return download_map
