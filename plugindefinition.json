@@ -88,6 +88,28 @@
       ],
       "LocalePath": [],
       "DataPath": []
+    },
+    {
+      "Version": "1.2.0",
+      "Released": "2026-08-14",
+      "MinSupport": "2.5.2",
+      "MaxSupport": "2.5.2",
+      "MinWorking": "2.5.2",
+      "ReleaseNotes": [
+        "## Features",
+        "* #25 - feat: check if downloaded before downloading",
+        "* #26 - feat: batch downloading",
+
+        "## Bugfixes",
+        "* #11 - fix: collections not appearing in 'Install' for Premium users - @Retrograde-i486 ",
+        "* #24 - fix: certificate issue causing collection information to not load"
+      ],
+      "DownloadUrl": "https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/download/1.2.0/nxm-collection-dl-1.2.0.zip",
+      "PluginPath": [
+        "nxm-collection-dl"
+      ],
+      "LocalePath": [],
+      "DataPath": []
     }
   ]
 }
