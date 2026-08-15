@@ -7,6 +7,7 @@ A Mod Organizer 2 plugin that lets you download Nexus Mods collections directly 
 - Choose a specific revision of the collection.
 - View counts for essential, optional, external and bundled resources.
 - Select optional/external items to include before downloading.
+- Queue collection downloads in batches to avoid overwhelming Nexus or MO2.
 - Opens mod downloads in web browser if the user does not have Premium
 
 #### Currently Unimplemented:
@@ -29,6 +30,7 @@ A Mod Organizer 2 plugin that lets you download Nexus Mods collections directly 
 4. Select any optional items you want
 5. Download via the 'Download Collection' tool
    - If you don't have Premium, make sure to check the 'Open in Browser' option to open the mod pages in your web browser for manual downloading.
+   - Collection downloads are started in small batches automatically so they are less likely to stall at 0%.
 6. Install the downloaded mods in MO2 using the 'Install Downloaded Collection' tool.
 
 ## Contributing

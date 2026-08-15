@@ -77,6 +77,11 @@ class DownloadCollectionTool(mobase.IPluginTool):
                 "modpage_batch_size", "Number of mod websites to open at once", 5
             ),
             mobase.PluginSetting(
+                "download_batch_size",
+                "Number of collection downloads to start at once",
+                3,
+            ),
+            mobase.PluginSetting(
                 "externalmods_browser_default",
                 "Open external mod URLs in browser by default",
                 True,
