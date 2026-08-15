@@ -524,15 +524,18 @@ class stepSummary(QDialog):
 class stepDownloadProgress(QDialog):
     """Progress dialog that tracks download completion"""
 
-    def __init__(self, parent=None, total_mods=0):
+    def __init__(self, parent=None, total_mods=0, queued_mods=None, batch_size=1):
         super().__init__(parent)
         self.setWindowTitle("NXM Collection Downloader - Download Progress")
         self.setMinimumWidth(350)
 
         self.total_mods = total_mods
+        self.queued_mods = list(queued_mods or [])
+        self.batch_size = max(1, int(batch_size))
         self.completed_count = 0
         self.failed_count = 0
         self.is_tracking = True
+        self.active_downloads = 0
 
         layout = QVBoxLayout()
 
@@ -560,10 +563,30 @@ class stepDownloadProgress(QDialog):
         # Register callbacks with download manager
         plugin_instance = getattr(__meta__, "_download_plugin", None)
         if plugin_instance and hasattr(plugin_instance, "_organizer"):
+            self.plugin_instance = plugin_instance
             self.download_manager = plugin_instance._organizer.downloadManager()
             self.download_manager.onDownloadComplete(self.on_download_complete)
             self.download_manager.onDownloadFailed(self.on_download_failed)
             self.download_manager.onDownloadRemoved(self.on_download_removed)
+        else:
+            self.plugin_instance = None
+
+    def start_downloads(self):
+        self._pump_download_queue()
+
+    def _pump_download_queue(self):
+        if not self.is_tracking or not self.plugin_instance:
+            return
+
+        while self.queued_mods and self.active_downloads < self.batch_size:
+            mod = self.queued_mods.pop(0)
+            self.active_downloads += 1
+            qDebug(
+                f"[NXMColDL] Starting queued download: {mod['file']['mod']['name']}"
+            )
+            self.plugin_instance.downloadMod(mod)
+
+        self.update_progress()
 
     def on_download_complete(self, download_id):
         """Called when a download completes successfully"""
@@ -571,9 +594,16 @@ class stepDownloadProgress(QDialog):
             return
 
         self.completed_count += 1
+        if self.active_downloads > 0:
+            self.active_downloads -= 1
         self.update_progress()
+        self._pump_download_queue()
 
-        if self.completed_count >= self.total_mods:
+        if (
+            self.completed_count >= self.total_mods
+            and not self.queued_mods
+            and self.active_downloads == 0
+        ):
             self.is_tracking = False
 
     def on_download_failed(self, download_id):
@@ -583,14 +613,35 @@ class stepDownloadProgress(QDialog):
 
         self.failed_count += 1
         self.completed_count += 1
+        if self.active_downloads > 0:
+            self.active_downloads -= 1
         self.update_progress()
+        self._pump_download_queue()
 
-        if self.completed_count >= self.total_mods:
+        if (
+            self.completed_count >= self.total_mods
+            and not self.queued_mods
+            and self.active_downloads == 0
+        ):
             self.is_tracking = False
 
     def on_download_removed(self, download_id):
         """Called when a download is removed/cancelled"""
-        pass
+        if not self.is_tracking:
+            return
+
+        self.completed_count += 1
+        if self.active_downloads > 0:
+            self.active_downloads -= 1
+        self.update_progress()
+        self._pump_download_queue()
+
+        if (
+            self.completed_count >= self.total_mods
+            and not self.queued_mods
+            and self.active_downloads == 0
+        ):
+            self.is_tracking = False
 
     def update_progress(self):
         """Update the progress display"""
@@ -608,9 +659,8 @@ class stepDownloadProgress(QDialog):
             self.detail_label.setText("All downloads completed!")
             self.detail_label.setStyleSheet("color: green;")
         else:
-            self.detail_label.setText(
-                f"Downloading... {self.total_mods - self.completed_count} remaining"
-            )
+            remaining = len(self.queued_mods) + self.active_downloads
+            self.detail_label.setText(f"Downloading... {remaining} remaining")
             self.detail_label.setStyleSheet("")
 
 
@@ -685,9 +735,6 @@ class stepDownload(QDialog):
 
                     queued_mods.append(mod)
 
-                for mod in queued_mods:
-                    plugin_instance.downloadMod(mod)
-
                 # Save collection metadata for later installation
                 try:
                     base_path = Path(plugin_instance._organizer.basePath())
@@ -704,9 +751,20 @@ class stepDownload(QDialog):
 
                 self.close()
                 if queued_mods:
+                    try:
+                        download_batch_size = int(
+                            plugin_instance._organizer.pluginSetting(
+                                plugin_instance.name(), "download_batch_size"
+                            )
+                            or 3
+                        )
+                    except (TypeError, ValueError):
+                        download_batch_size = 3
+
                     progress_dialog = stepDownloadProgress(
-                        self.parent(), len(queued_mods)
+                        self.parent(), len(queued_mods), queued_mods, download_batch_size
                     )
+                    progress_dialog.start_downloads()
                     progress_dialog.exec()
                 else:
                     QMessageBox.information(
