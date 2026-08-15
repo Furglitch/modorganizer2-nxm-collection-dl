@@ -22,7 +22,6 @@ class DownloadCollectionTool(mobase.IPluginTool):
 
     def init(self, organizer: mobase.IOrganizer):
         self._organizer = organizer
-        qDebug("[NXMColDL] Initializing Download Collection plugin")
         try:
             import sys as _sys
 
@@ -62,8 +61,9 @@ class DownloadCollectionTool(mobase.IPluginTool):
         self._parent = widget
 
     def display(self) -> None:
-        dlg = getattr(self, "_stepURL", None) or stepURL()
-        dlg.exec()
+        if not hasattr(self, "_stepURL") or self._stepURL is None:
+            self._stepURL = stepURL(getattr(self, "_parent", None))
+        self._stepURL.exec()
 
     def settings(self):
         return [
@@ -89,7 +89,7 @@ class DownloadCollectionTool(mobase.IPluginTool):
     def downloadMod(self, modInfo: dict):
         modID = int(modInfo["file"]["mod"]["modId"])
         fileID = int(modInfo["file"]["fileId"])
-        qDebug(f"[NXMColDL] Downloading mod {modID} file {fileID}")
+        qDebug(f"Downloading mod {modID} file {fileID}")
         return self._organizer.downloadManager().startDownloadNexusFile(modID, fileID)
 
 
@@ -102,7 +102,6 @@ class InstallCollectionTool(mobase.IPluginTool):
 
     def init(self, organizer: mobase.IOrganizer):
         self._organizer = organizer
-        qDebug("[NXMColDL] Initializing Install Collection plugin")
         try:
             import sys
 
@@ -142,8 +141,9 @@ class InstallCollectionTool(mobase.IPluginTool):
         self._parent = widget
 
     def display(self) -> None:
-        dlg = getattr(self, "_stepSelectCollection", None) or stepSelectCollection()
-        dlg.exec()
+        if not hasattr(self, "_stepSelectCollection") or self._stepSelectCollection is None:
+            self._stepSelectCollection = stepSelectCollection(getattr(self, "_parent", None))
+        self._stepSelectCollection.exec()
 
     def settings(self):
         return [mobase.PluginSetting("enabled", "Enable", True)]
