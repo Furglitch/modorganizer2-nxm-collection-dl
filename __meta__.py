@@ -1,5 +1,5 @@
 import mobase  # type: ignore
-from PyQt6.QtCore import qDebug
+from .debug import qDebug
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMainWindow
 from .download import stepURL
@@ -146,8 +146,13 @@ class InstallCollectionTool(mobase.IPluginTool):
         self._parent = widget
 
     def display(self) -> None:
-        if not hasattr(self, "_stepSelectCollection") or self._stepSelectCollection is None:
-            self._stepSelectCollection = stepSelectCollection(getattr(self, "_parent", None))
+        if (
+            not hasattr(self, "_stepSelectCollection")
+            or self._stepSelectCollection is None
+        ):
+            self._stepSelectCollection = stepSelectCollection(
+                getattr(self, "_parent", None)
+            )
         self._stepSelectCollection.exec()
 
     def settings(self):

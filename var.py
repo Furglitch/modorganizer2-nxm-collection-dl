@@ -2,7 +2,8 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime
-from PyQt6.QtCore import qDebug, QUrl
+from PyQt6.QtCore import QUrl
+from .debug import qDebug
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
