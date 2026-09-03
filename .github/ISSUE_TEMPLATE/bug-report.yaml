@@ -35,14 +35,6 @@ body:
   - type: markdown
     attributes:
       value: '## Install Environment'
-  - type: input
-    id: version
-    attributes:
-      label: Plugin version
-      description: Do not put 'latest', put the version number
-      value: '1.X.X'
-    validations:
-      required: true
   - type: dropdown
     id: version
     attributes:
