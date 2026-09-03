@@ -68,7 +68,7 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Please include Mod Organizer's debug logs here.
+      description: Please include logs starting with [NXMColDL] here
       render: shell
     validations:
       required: true
