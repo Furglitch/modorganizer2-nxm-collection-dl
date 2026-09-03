@@ -38,9 +38,22 @@ body:
   - type: input
     id: version
     attributes:
-      label: Installer version
+      label: Plugin version
       description: Do not put 'latest', put the version number
       value: '1.X.X'
+    validations:
+      required: true
+  - type: dropdown
+    id: version
+    attributes:
+      label: Plugin version
+      options:
+        - "1.2.0"
+        - "1.1.1"
+        - "1.1.0"
+        - "1.0.2"
+        - "1.0.1"
+        - "1.0.0"
     validations:
       required: true
   - type: input
