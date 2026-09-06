@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 
 from PyQt6.QtCore import Qt, QTimer, qDebug
 from PyQt6.QtWidgets import (
@@ -151,18 +152,18 @@ class stepSelectCollection(QDialog):
 
             # Update info label
             self.info.setText(f"""
-				<h2 style="margin:0;padding:0">{name}</h2>
-				<br>
-				by <i>{author}</i>
-				<br>
-				<br>
-				{summary}
-				<br>
-				<br>
-				<b>Total Mods:</b> {total_mods}
-				<br>
-				<b>Downloaded:</b> {timestamp.split("T")[0] if "T" in timestamp else timestamp}
-			""")
+                <h2 style="margin:0;padding:0">{name}</h2>
+                <br>
+                by <i>{author}</i>
+                <br>
+                <br>
+                {summary}
+                <br>
+                <br>
+                <b>Total Mods:</b> {total_mods}
+                <br>
+                <b>Downloaded:</b> {timestamp.split("T")[0] if "T" in timestamp else timestamp}
+            """)
 
             # Update thumbnail
             if thumbnail:
@@ -347,7 +348,8 @@ class stepInstallMods(QDialog):
 
                 # Install the mod
                 try:
-                    installed_mod = organizer.installMod(str(download_path), mod_name)
+                    safe_mod_name = re.sub(r'[\\/*?:"<>|]', "", mod_name)
+                    installed_mod = organizer.installMod(str(download_path), safe_mod_name)
                     if installed_mod:
                         internal_name = installed_mod.name()
                         modlist.setActive(internal_name, True)
