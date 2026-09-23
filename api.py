@@ -1,5 +1,4 @@
 import json
-import ssl
 from pathlib import Path
 import urllib.request
 from PyQt6.QtCore import qDebug
@@ -12,19 +11,25 @@ except ImportError:
 from . import var
 
 
-cert = None
-if certifi is not None:
-    cert = certifi.where()
-else:
-    bundled_ca_bundle = Path(__file__).resolve().with_name("cacert.pem")
-    if bundled_ca_bundle.exists():
-        cert = str(bundled_ca_bundle)
+def _make_ssl_context():
+    import ssl
 
-SSL_CONTEXT = (
-    ssl.create_default_context(cafile=cert)
-    if cert
-    else ssl.create_default_context()
-)
+    cert = None
+    if certifi is not None:
+        cert = certifi.where()
+    else:
+        bundled_ca_bundle = Path(__file__).resolve().with_name("cacert.pem")
+        if bundled_ca_bundle.exists():
+            cert = str(bundled_ca_bundle)
+
+    return (
+        ssl.create_default_context(cafile=cert)
+        if cert
+        else ssl.create_default_context()
+    )
+
+
+SSL_CONTEXT = _make_ssl_context()
 
 
 def nxmFetch(requestData):
