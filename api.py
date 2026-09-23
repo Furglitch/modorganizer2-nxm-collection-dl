@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import urllib.request
-from PyQt6.QtCore import qDebug
+from .debug import qDebug
 
 try:
     import certifi

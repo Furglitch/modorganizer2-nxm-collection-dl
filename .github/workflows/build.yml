@@ -18,18 +18,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.2.2
 
-      - name: Create directory structure
+      - name: Create package directory
         run: |
+          rm -rf nxm-collection-dl
           mkdir -p nxm-collection-dl
-          cp __init__.py nxm-collection-dl/
-          cp __meta__.py nxm-collection-dl/
-          cp api.py nxm-collection-dl/
-          cp download.py nxm-collection-dl/
-          cp install.py nxm-collection-dl/
-          cp var.py nxm-collection-dl/
-          cp -R icons/ nxm-collection-dl/
-          cp LICENSE nxm-collection-dl/
-          cp README.md nxm-collection-dl/
+          cp __init__.py __meta__.py api.py download.py install.py var.py LICENSE README.md nxm-collection-dl/ || true
+          cp -R icons/ nxm-collection-dl/ || true
+          test -f cacert.pem && cp cacert.pem nxm-collection-dl/ || true
 
       - name: Create release archive
         run: |
