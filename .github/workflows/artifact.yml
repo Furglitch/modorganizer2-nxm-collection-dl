@@ -1,0 +1,62 @@
+name: Build Artifact
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "icons/**"
+      - "PyQt6/**"
+      - "__init__.py"
+      - "__meta__.py"
+      - "api.py"
+      - "cacert.pem"
+      - "download.py"
+      - "install.py"
+      - "pyproject.toml"
+      - "var.py"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "icons/**"
+      - "PyQt6/**"
+      - "__init__.py"
+      - "__meta__.py"
+      - "api.py"
+      - "cacert.pem"
+      - "download.py"
+      - "install.py"
+      - "pyproject.toml"
+      - "var.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: artifact-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create package directory
+        run: |
+          rm -rf nxm-collection-dl
+          mkdir -p nxm-collection-dl
+          cp __init__.py __meta__.py api.py download.py install.py var.py LICENSE README.md nxm-collection-dl/ || true
+          cp -R icons/ nxm-collection-dl/ || true
+          cp -R PyQt6/ nxm-collection-dl/ || true
+          test -f cacert.pem && cp cacert.pem nxm-collection-dl/ || true
+
+      - name: Create zip archive
+        run: |
+          zip -r nxm-collection-dl.zip nxm-collection-dl
+
+      - name: Upload Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxm-collection-dl-artifact
+          path: nxm-collection-dl.zip
