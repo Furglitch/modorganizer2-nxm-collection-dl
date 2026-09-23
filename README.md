@@ -15,6 +15,10 @@ A Mod Organizer 2 plugin that lets you download Nexus Mods collections directly 
 - Cannot auto-detect user Premium status
 - Unable to implement bundled resources (Not in Nexus API documentation, will check if possible soon.)
 
+## Requirements
+
+- Mod Organizer (v2.5.2+)
+
 ## Installation
 
 1. Download the [latest release](https://github.com/Furglitch/modorganizer2-nxm-collection-dl/releases/latest)
@@ -32,9 +36,3 @@ A Mod Organizer 2 plugin that lets you download Nexus Mods collections directly 
    - If you don't have Premium, make sure to check the 'Open in Browser' option to open the mod pages in your web browser for manual downloading.
    - Collection downloads are started in small batches automatically so they are less likely to stall at 0%.
 6. Install the downloaded mods in MO2 using the 'Install Downloaded Collection' tool.
-
-## Contributing
-
-Contributions welcome! Feel free to open issues or submit pull requests.
-
-Set up the dev environment with `uv sync`, set up pre-commit hooks, then copy the files to your MO2 plugins directory to test.
