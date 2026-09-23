@@ -2,7 +2,7 @@ import json
 import ssl
 from pathlib import Path
 import urllib.request
-from PyQt6.QtCore import qDebug
+from .debug import qDebug
 
 try:
     import certifi
@@ -21,9 +21,7 @@ else:
         cert = str(bundled_ca_bundle)
 
 SSL_CONTEXT = (
-    ssl.create_default_context(cafile=cert)
-    if cert
-    else ssl.create_default_context()
+    ssl.create_default_context(cafile=cert) if cert else ssl.create_default_context()
 )
 
 

@@ -1,6 +1,13 @@
 import re
 from pathlib import Path
-from PyQt6.QtCore import QObject, QSize, QThread, Qt, QUrl, pyqtSignal, qDebug
+from PyQt6.QtCore import (
+    QObject,
+    QSize,
+    QThread,
+    Qt,
+    QUrl,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QDesktopServices, QFontMetrics
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -20,8 +27,10 @@ from PyQt6.QtWidgets import (
 )
 
 from .api import fetchRevisions, fetchInfo, fetchModInfo
+
 from . import __meta__
 from . import var
+from .debug import qDebug
 
 
 class ModInfoWorker(QObject):
@@ -72,7 +81,7 @@ class stepURL(QDialog):
         for suffix in ["/mods", "/comments", "/changelog", "/bugs"]:
             if input_url.endswith(suffix):
                 input_url = input_url[: -len(suffix)]
-        qDebug(f"[NXMColDL] URL entered: {input_url}")
+        qDebug(f"[NXMColDL] URL áó entered: {input_url}")
         var.uri = input_url
         return self.check_valid(input_url)
 
@@ -581,9 +590,7 @@ class stepDownloadProgress(QDialog):
         while self.queued_mods and self.active_downloads < self.batch_size:
             mod = self.queued_mods.pop(0)
             self.active_downloads += 1
-            qDebug(
-                f"[NXMColDL] Starting queued download: {mod['file']['mod']['name']}"
-            )
+            qDebug(f"[NXMColDL] Starting queued download: {mod['file']['mod']['name']}")
             self.plugin_instance.downloadMod(mod)
 
         self.update_progress()
@@ -762,7 +769,10 @@ class stepDownload(QDialog):
                         download_batch_size = 3
 
                     progress_dialog = stepDownloadProgress(
-                        self.parent(), len(queued_mods), queued_mods, download_batch_size
+                        self.parent(),
+                        len(queued_mods),
+                        queued_mods,
+                        download_batch_size,
                     )
                     progress_dialog.start_downloads()
                     progress_dialog.exec()
